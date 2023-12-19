@@ -8,16 +8,22 @@
 #include <iostream>
 #include <thread>
 
-using std::string;
+#include "encryption.hpp"
+#include "sr.hpp"
 
-using std::cout, std::endl, std::thread;
+using std::cout, std::endl;
+using std::string, std::thread;
 
-void handeClient(int clientSock) {
+void handeClient(int clientSock, sqlite3* db) {
     char buffer[1024];
-    recv(clientSock, &buffer, sizeof(buffer), 0);
-    char msg[1024];
-    snprintf(msg, sizeof(msg), "Hello, %s!!!", buffer);
-    send(clientSock, &msg, sizeof(msg), 0);
+    string sBuffer;
+    string sql;
+    if (recv(clientSock) == "Sign Up") {
+        sBuffer = recv(clientSock);
+        sql =
+            "select username from users where username = \"" + sBuffer + "\";";
+        sqlite3_exec(db, sql.c_str(), 0, 0, 0);
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -28,10 +34,9 @@ int main(int argc, char* argv[]) {
     sqlite3* db;
     sqlite3_open(path.c_str(), &db);
     string sql =
-        "CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, nickname "
-        "TEXT, password TEXT)";
-    char* sqlError;
-    sqlite3_exec(db, sql.c_str(), NULL, 0, &sqlError);
+        "CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username "
+        "TEXT, password TEXT);";
+    sqlite3_exec(db, sql.c_str(), 0, 0, 0);
 
     int servSock = socket(AF_INET, SOCK_STREAM, 0), opt = 1;
     setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt,
@@ -44,7 +49,8 @@ int main(int argc, char* argv[]) {
     bind(servSock, (sockaddr*)&servAddr, sizeof(servAddr));
     listen(servSock, 5);
     while (true)
-        thread(handeClient, accept(servSock, (sockaddr*)&servAddr, &addrLen))
+        thread(handeClient, accept(servSock, (sockaddr*)&servAddr, &addrLen),
+               db)
             .detach();
     close(servSock);
     sqlite3_close(db);

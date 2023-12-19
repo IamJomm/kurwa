@@ -1,8 +1,10 @@
 #include <iostream>
 #include <vector>
 
-#include "rsa.hpp"
-using namespace std;
+#include "encryption.hpp"
+
+using std::vector, std::cout, std::endl;
+
 int main() {
     int n, publicKey, privateKey;
     genPrime(250);
