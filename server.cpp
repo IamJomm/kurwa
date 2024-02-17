@@ -4,7 +4,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include <cstdio>
 #include <iostream>
 #include <thread>
 
@@ -14,15 +13,21 @@
 using std::cout, std::endl;
 using std::string, std::thread;
 
-void handeClient(int clientSock, sqlite3* db) {
+void handeClient(clsSock clientSock, sqlite3* db) {
     char buffer[1024];
     string sBuffer;
     string sql;
-    if (recv(clientSock) == "Sign Up") {
-        sBuffer = recv(clientSock);
+    sqlite3_stmt* stmt;
+    cout << "abc" << endl;
+    if (clientSock.recv() == "Sign Up") {
+        sBuffer = clientSock.recv();
+        cout << sBuffer << endl;
         sql =
-            "select username from users where username = \"" + sBuffer + "\";";
-        sqlite3_exec(db, sql.c_str(), 0, 0, 0);
+            "SELECT username FROM users WHERE username = \"" + sBuffer + "\";";
+        sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+        cout << "aaa" << endl;
+        sqlite3_step(stmt);
+        cout << stmt << endl << sqlite3_column_int(stmt, 0);
     }
 }
 
@@ -49,8 +54,8 @@ int main(int argc, char* argv[]) {
     bind(servSock, (sockaddr*)&servAddr, sizeof(servAddr));
     listen(servSock, 5);
     while (true)
-        thread(handeClient, accept(servSock, (sockaddr*)&servAddr, &addrLen),
-               db)
+        thread(handeClient,
+               clsSock(accept(servSock, (sockaddr*)&servAddr, &addrLen)), db)
             .detach();
     close(servSock);
     sqlite3_close(db);

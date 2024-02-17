@@ -12,7 +12,7 @@
 
 using std::string, std::vector, std::cout, std::endl, std::cin;
 
-int clientSock;
+clsSock clientSock;
 
 string drawUI(vector<string> arr) {
     noecho();
@@ -46,30 +46,29 @@ int main() {
     raw();
     keypad(stdscr, TRUE);
 
-    clientSock = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in servAddr;
     servAddr.sin_family = AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr.s_addr);
     servAddr.sin_port = htons(8080);
-    connect(clientSock, (sockaddr*)&servAddr, sizeof(servAddr));
+    connect(clientSock.sock, (sockaddr*)&servAddr, sizeof(servAddr));
 
     char buffer[1024];
     string sBuffer;
     if (drawUI({"Kurwa:", "Sign Up", "Sign In"}) == "Sign Up") {
         sBuffer = "Sign Up";
-        send(clientSock, sBuffer);
+        clientSock.send(sBuffer);
         do {
             printw("Enter Username: ");
             getstr(buffer);
-            send(clientSock, buffer);
-        } while (recv(clientSock) != "ok");
+            clientSock.send(buffer);
+        } while (clientSock.recv() != "ok");
         printw("Enter Password: ");
         getstr(buffer);
-        send(clientSock, buffer);
+        clientSock.send(buffer);
         clear();
     } else {
     }
 
     endwin();
-    close(clientSock);
+    close(clientSock.sock);
 }
