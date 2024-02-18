@@ -50,7 +50,11 @@ int main() {
     servAddr.sin_family = AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr.s_addr);
     servAddr.sin_port = htons(8080);
-    connect(clientSock.sock, (sockaddr*)&servAddr, sizeof(servAddr));
+    if (connect(clientSock.sock, (sockaddr*)&servAddr, sizeof(servAddr)) ==
+        -1) {
+        printw("[!] kurwa ne pracuie.");
+        return -1;
+    }
 
     char buffer[1024];
     string sBuffer;

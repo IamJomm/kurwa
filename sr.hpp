@@ -1,8 +1,10 @@
 #include <sys/socket.h>
 
+#include <cstring>
+#include <iostream>
 #include <string>
 
-using std::string, std::to_string, std::stoi, std::min;
+using std::string, std::to_string, std::stoi, std::min, std::cout, std::endl;
 
 class clsSock {
    public:
@@ -21,6 +23,7 @@ class clsSock {
         ::recv(sock, buffer, 1024, 0);
         msgSize = stoi(buffer);
         while (msgSize != 0) {
+            memset(buffer, 0, sizeof(buffer));
             msgSize -= ::recv(sock, buffer, min(1024, msgSize), 0);
             res.append(buffer);
         }

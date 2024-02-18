@@ -13,21 +13,17 @@
 using std::cout, std::endl;
 using std::string, std::thread;
 
-void handeClient(clsSock clientSock, sqlite3* db) {
+void handleClient(clsSock clientSock, sqlite3* db) {
+    cout << "[+] New kurwa client connected." << endl;
     char buffer[1024];
     string sBuffer;
     string sql;
     sqlite3_stmt* stmt;
-    cout << "abc" << endl;
     if (clientSock.recv() == "Sign Up") {
         sBuffer = clientSock.recv();
-        cout << sBuffer << endl;
         sql =
-            "SELECT username FROM users WHERE username = \"" + sBuffer + "\";";
+            "SELECT username FROM users WHERE username = \'" + sBuffer + "\';";
         sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
-        cout << "aaa" << endl;
-        sqlite3_step(stmt);
-        cout << stmt << endl << sqlite3_column_int(stmt, 0);
     }
 }
 
@@ -44,6 +40,10 @@ int main(int argc, char* argv[]) {
     sqlite3_exec(db, sql.c_str(), 0, 0, 0);
 
     int servSock = socket(AF_INET, SOCK_STREAM, 0), opt = 1;
+    if (servSock == -1) {
+        cout << "[!] Cannot create socket.";
+        return -1;
+    }
     setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt,
                sizeof(opt));
     sockaddr_in servAddr;
@@ -51,12 +51,22 @@ int main(int argc, char* argv[]) {
     servAddr.sin_addr.s_addr = INADDR_ANY;
     servAddr.sin_port = htons(8080);
     socklen_t addrLen = sizeof(servAddr);
-    bind(servSock, (sockaddr*)&servAddr, sizeof(servAddr));
-    listen(servSock, 5);
-    while (true)
-        thread(handeClient,
-               clsSock(accept(servSock, (sockaddr*)&servAddr, &addrLen)), db)
-            .detach();
+    if (bind(servSock, (sockaddr*)&servAddr, sizeof(servAddr)) == -1) {
+        cout << "[!] Cannot bind socket.";
+        return -1;
+    }
+    if (listen(servSock, 5) == -1) {
+        cout << "[!] Idi nahui :3";
+        return -1;
+    }
+    cout << "[!] Everything is ok :)" << endl;
+    while (true) {
+        int clientSock = accept(servSock, (sockaddr*)&servAddr, &addrLen);
+        if (clientSock == -1) {
+            cout << "[!] Cannot connect client :)";
+        }
+        thread(handleClient, clsSock(clientSock), db).detach();
+    }
     close(servSock);
     sqlite3_close(db);
 }
