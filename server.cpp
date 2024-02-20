@@ -1,4 +1,5 @@
 #include <netinet/in.h>
+#include <openssl/sha.h>
 #include <sqlite3.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -13,17 +14,31 @@
 using std::cout, std::endl;
 using std::string, std::thread;
 
-void handleClient(clsSock clientSock, sqlite3* db) {
-    cout << "[+] New kurwa client connected." << endl;
-    char buffer[1024];
+void clientReg(clsSock& clientSock, sqlite3* db) {
     string sBuffer;
     string sql;
     sqlite3_stmt* stmt;
-    if (clientSock.recv() == "Sign Up") {
+    while (true) {
         sBuffer = clientSock.recv();
         sql =
             "SELECT username FROM users WHERE username = \'" + sBuffer + "\';";
         sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+        if (sqlite3_step(stmt) == SQLITE_ROW)
+            clientSock.send("not ok");
+        else {
+            clientSock.send("ok");
+            break;
+        }
+    }
+    sBuffer = clientSock.recv();
+
+    sqlite3_finalize(stmt);
+}
+
+void handleClient(clsSock clientSock, sqlite3* db) {
+    cout << "[+] New kurwa client connected." << endl;
+    if (clientSock.recv() == "Sign Up") {
+        clientReg(clientSock, db);
     }
 }
 

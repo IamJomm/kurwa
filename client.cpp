@@ -41,6 +41,22 @@ string drawUI(vector<string> arr) {
     return arr[choice];
 }
 
+void clientReg() {
+    char buffer[1024];
+    string sBuffer;
+    sBuffer = "Sign Up";
+    clientSock.send(sBuffer);
+    do {
+        printw("Enter Username: ");
+        getstr(buffer);
+        clientSock.send(buffer);
+    } while (clientSock.recv() != "ok");
+    printw("Enter Password: ");
+    getstr(buffer);
+    clientSock.send(buffer);
+    clear();
+}
+
 int main() {
     initscr();
     raw();
@@ -56,20 +72,8 @@ int main() {
         return -1;
     }
 
-    char buffer[1024];
-    string sBuffer;
     if (drawUI({"Kurwa:", "Sign Up", "Sign In"}) == "Sign Up") {
-        sBuffer = "Sign Up";
-        clientSock.send(sBuffer);
-        do {
-            printw("Enter Username: ");
-            getstr(buffer);
-            clientSock.send(buffer);
-        } while (clientSock.recv() != "ok");
-        printw("Enter Password: ");
-        getstr(buffer);
-        clientSock.send(buffer);
-        clear();
+        clientReg();
     } else {
     }
 
