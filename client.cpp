@@ -57,6 +57,8 @@ void clientReg() {
     clear();
 }
 
+void clientLog() {}
+
 int main() {
     initscr();
     raw();
@@ -74,7 +76,9 @@ int main() {
 
     if (drawUI({"Kurwa:", "Sign Up", "Sign In"}) == "Sign Up") {
         clientReg();
+        clientLog();
     } else {
+        clientLog();
     }
 
     endwin();

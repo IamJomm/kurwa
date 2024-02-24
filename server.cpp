@@ -5,6 +5,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cstring>
 #include <iostream>
 #include <thread>
 
@@ -18,6 +19,8 @@ void clientReg(clsSock& clientSock, sqlite3* db) {
     string sBuffer;
     string sql;
     sqlite3_stmt* stmt;
+    string username;
+
     while (true) {
         sBuffer = clientSock.recv();
         sql =
@@ -26,20 +29,37 @@ void clientReg(clsSock& clientSock, sqlite3* db) {
         if (sqlite3_step(stmt) == SQLITE_ROW)
             clientSock.send("not ok");
         else {
+            username = sBuffer;
             clientSock.send("ok");
             break;
         }
     }
+
     sBuffer = clientSock.recv();
+    unsigned char buffer[sBuffer.length()];
+    strcpy((char*)buffer, sBuffer.c_str());
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(buffer, strlen((char*)buffer), hash);
+    string formatedHash(reinterpret_cast<const char*>(hash),
+                        SHA256_DIGEST_LENGTH);
+    sql = "INSERT INTO users (username, password) VALUES (\'" + username +
+          "\', \'" + formatedHash + "\');";
+    sqlite3_exec(db, sql.c_str(), 0, 0, 0);
 
     sqlite3_finalize(stmt);
 }
 
+long clientLog(clsSock& clientSock, sqlite3* db) {}
+
 void handleClient(clsSock clientSock, sqlite3* db) {
     cout << "[+] New kurwa client connected." << endl;
+
+    long clientId;
     if (clientSock.recv() == "Sign Up") {
         clientReg(clientSock, db);
-    }
+        clientId = clientLog(clientSock, db);
+    } else
+        clientId = clientLog(clientSock, db);
 }
 
 int main(int argc, char* argv[]) {
