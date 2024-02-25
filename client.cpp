@@ -44,11 +44,9 @@ class client {
 
     void reg() {
         char buffer[1024];
-        string sBuffer;
-        sBuffer = "Sign Up";
-        sock.send(sBuffer);
         do {
-            printw("Enter Username: ");
+            clear();
+            printw("Sign Up\nEnter Username: ");
             getstr(buffer);
             sock.send(buffer);
         } while (sock.recv() != "ok");
@@ -58,7 +56,18 @@ class client {
         clear();
     }
 
-    void log() {}
+    void log() {
+        char buffer[1024];
+        do {
+            printw("Sign In\nEnter Username: ");
+            getstr(buffer);
+            sock.send(buffer);
+            printw("Enter Password: ");
+            getstr(buffer);
+            sock.send(buffer);
+            clear();
+        } while (sock.recv() != "ok");
+    }
 };
 
 int main() {
@@ -76,10 +85,12 @@ int main() {
         return -1;
     }
 
-    if (drawUI({"Kurwa:", "Sign Up", "Sign In"}) == "Sign Up") {
+    if (drawUI({"Choose one option:", "Sign Up", "Sign In"}) == "Sign Up") {
+        main.sock.send("Sign Up");
         main.reg();
         main.log();
     } else {
+        main.sock.send("Sign In");
         main.log();
     }
 

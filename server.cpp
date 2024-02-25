@@ -18,7 +18,7 @@ class client {
    public:
     clsSock sock;
     string username;
-    long id;
+    unsigned long id = 0;
 
     void reg(sqlite3* db) {
         string sBuffer;
@@ -46,11 +46,41 @@ class client {
                             SHA256_DIGEST_LENGTH);
         sql = "INSERT INTO users (username, password) VALUES (\'" + username +
               "\', \'" + formatedHash + "\');";
+        cout << sql << endl;
         sqlite3_exec(db, sql.c_str(), 0, 0, 0);
         sqlite3_finalize(stmt);
     }
 
-    void log(sqlite3* db) {}
+    void log(sqlite3* db) {
+        string sql;
+        sqlite3_stmt* stmt;
+        do {
+            string recvdUsername = sock.recv();
+            string recvdPassword = sock.recv();
+            sql = "SELECT id, password FROM users WHERE username = \'" +
+                  recvdUsername + "\';";
+            sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                unsigned char buffer[recvdPassword.length()];
+                strcpy((char*)buffer, recvdPassword.c_str());
+                unsigned char hash[SHA256_DIGEST_LENGTH];
+                SHA256(buffer, strlen((char*)buffer), hash);
+                string formatedHash(reinterpret_cast<const char*>(hash),
+                                    SHA256_DIGEST_LENGTH);
+                string dbHash(
+                    reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)),
+                    SHA256_DIGEST_LENGTH);
+                if (formatedHash == dbHash) {
+                    id = sqlite3_column_int(stmt, 0);
+                    username = recvdUsername;
+                    sock.send("ok");
+                } else
+                    sock.send("not ok");
+            } else
+                sock.send("not ok");
+        } while (!id);
+        sqlite3_finalize(stmt);
+    }
 
     client(int x) : sock(x) {}
 };
@@ -62,7 +92,7 @@ void handleClient(client client, sqlite3* db) {
         client.log(db);
     } else
         client.log(db);
-
+    cout << client.id << endl;
     close(client.sock.sock);
 }
 
