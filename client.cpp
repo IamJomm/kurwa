@@ -12,8 +12,6 @@
 
 using std::string, std::vector, std::cout, std::endl, std::cin;
 
-clsSock clientSock;
-
 string drawUI(vector<string> arr) {
     noecho();
     int choice = 1, ch;
@@ -40,47 +38,51 @@ string drawUI(vector<string> arr) {
     echo();
     return arr[choice];
 }
+class client {
+   public:
+    clsSock sock;
 
-void clientReg() {
-    char buffer[1024];
-    string sBuffer;
-    sBuffer = "Sign Up";
-    clientSock.send(sBuffer);
-    do {
-        printw("Enter Username: ");
+    void reg() {
+        char buffer[1024];
+        string sBuffer;
+        sBuffer = "Sign Up";
+        sock.send(sBuffer);
+        do {
+            printw("Enter Username: ");
+            getstr(buffer);
+            sock.send(buffer);
+        } while (sock.recv() != "ok");
+        printw("Enter Password: ");
         getstr(buffer);
-        clientSock.send(buffer);
-    } while (clientSock.recv() != "ok");
-    printw("Enter Password: ");
-    getstr(buffer);
-    clientSock.send(buffer);
-    clear();
-}
+        sock.send(buffer);
+        clear();
+    }
 
-void clientLog() {}
+    void log() {}
+};
 
 int main() {
     initscr();
     raw();
     keypad(stdscr, TRUE);
 
+    client main;
     sockaddr_in servAddr;
     servAddr.sin_family = AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr.s_addr);
     servAddr.sin_port = htons(8080);
-    if (connect(clientSock.sock, (sockaddr*)&servAddr, sizeof(servAddr)) ==
-        -1) {
+    if (connect(main.sock.sock, (sockaddr*)&servAddr, sizeof(servAddr)) == -1) {
         printw("[!] kurwa ne pracuie.");
         return -1;
     }
 
     if (drawUI({"Kurwa:", "Sign Up", "Sign In"}) == "Sign Up") {
-        clientReg();
-        clientLog();
+        main.reg();
+        main.log();
     } else {
-        clientLog();
+        main.log();
     }
 
     endwin();
-    close(clientSock.sock);
+    close(main.sock.sock);
 }
