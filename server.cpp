@@ -5,30 +5,39 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include <cstring>
 #include <iostream>
 #include <thread>
 
 #include "encryption.hpp"
 #include "sr.hpp"
 
-using std::string, std::thread, std::cout, std::endl;
+using std::string, std::thread, std::cout, std::endl, std::stringstream;
+
+const char* genSha256Hash(string& input) {
+    unsigned char buffer[input.length()];
+    strcpy((char*)buffer, input.c_str());
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(buffer, strlen((char*)buffer), hash);
+    char* res = new char[SHA256_DIGEST_LENGTH];
+    memcpy(res, hash, SHA256_DIGEST_LENGTH);
+    return res;
+}
 
 class client {
    public:
     clsSock sock;
-    string username;
     unsigned long id = 0;
 
     void reg(sqlite3* db) {
         string sBuffer;
         string sql;
         sqlite3_stmt* stmt;
+        string username;
         while (true) {
             sBuffer = sock.recv();
-            sql = "SELECT username FROM users WHERE username = \'" + sBuffer +
-                  "\';";
+            sql = "SELECT username FROM users WHERE username = ?;";
             sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            sqlite3_bind_text(stmt, 1, sBuffer.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW)
                 sock.send("not ok");
             else {
@@ -36,43 +45,35 @@ class client {
                 sock.send("ok");
                 break;
             }
+            sqlite3_finalize(stmt);
         }
         sBuffer = sock.recv();
-        unsigned char buffer[sBuffer.length()];
-        strcpy((char*)buffer, sBuffer.c_str());
-        unsigned char hash[SHA256_DIGEST_LENGTH];
-        SHA256(buffer, strlen((char*)buffer), hash);
-        string formatedHash(reinterpret_cast<const char*>(hash),
-                            SHA256_DIGEST_LENGTH);
-        sql = "INSERT INTO users (username, password) VALUES (\'" + username +
-              "\', \'" + formatedHash + "\');";
-        cout << sql << endl;
-        sqlite3_exec(db, sql.c_str(), 0, 0, 0);
+        const char* password = genSha256Hash(sBuffer);
+        sql = "INSERT INTO users (username, password) VALUES (?, ?);";
+        sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 2, password, SHA256_DIGEST_LENGTH,
+                          SQLITE_TRANSIENT);
+        sqlite3_step(stmt);
+        delete[] password;
         sqlite3_finalize(stmt);
+        cout << "[+] New user created." << endl;
     }
 
     void log(sqlite3* db) {
         string sql;
         sqlite3_stmt* stmt;
         do {
-            string recvdUsername = sock.recv();
-            string recvdPassword = sock.recv();
-            sql = "SELECT id, password FROM users WHERE username = \'" +
-                  recvdUsername + "\';";
+            string username = sock.recv();
+            string password = sock.recv();
+            sql = "SELECT id, password FROM users WHERE username = ?;";
             sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW) {
-                unsigned char buffer[recvdPassword.length()];
-                strcpy((char*)buffer, recvdPassword.c_str());
-                unsigned char hash[SHA256_DIGEST_LENGTH];
-                SHA256(buffer, strlen((char*)buffer), hash);
-                string formatedHash(reinterpret_cast<const char*>(hash),
-                                    SHA256_DIGEST_LENGTH);
-                string dbHash(
-                    reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)),
-                    SHA256_DIGEST_LENGTH);
-                if (formatedHash == dbHash) {
+                const char* dbHash = (const char*)sqlite3_column_text(stmt, 1);
+                const char* hash = genSha256Hash(password);
+                if (!strcmp(dbHash, hash)) {
                     id = sqlite3_column_int(stmt, 0);
-                    username = recvdUsername;
                     sock.send("ok");
                 } else
                     sock.send("not ok");
@@ -92,7 +93,6 @@ void handleClient(client client, sqlite3* db) {
         client.log(db);
     } else
         client.log(db);
-    cout << client.id << endl;
     close(client.sock.sock);
 }
 
@@ -105,7 +105,7 @@ int main(int argc, char* argv[]) {
     sqlite3_open(path.c_str(), &db);
     string sql =
         "CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username "
-        "TEXT, password TEXT);";
+        "TEXT, password BLOB);";
     sqlite3_exec(db, sql.c_str(), 0, 0, 0);
 
     int servSock = socket(AF_INET, SOCK_STREAM, 0), opt = 1;

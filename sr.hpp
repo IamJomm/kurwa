@@ -2,7 +2,6 @@
 
 #include <cstring>
 #include <iostream>
-#include <string>
 
 using std::string, std::to_string, std::stoi, std::min, std::cout, std::endl;
 
