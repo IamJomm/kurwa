@@ -5,13 +5,15 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cstdio>
 #include <iostream>
+#include <string>
 #include <thread>
 
 #include "encryption.hpp"
 #include "sr.hpp"
 
-using std::string, std::thread, std::cout, std::endl, std::stringstream;
+using std::string, std::thread, std::cout, std::endl;
 
 const char* genSha256Hash(string& input) {
     unsigned char buffer[input.length()];
@@ -35,7 +37,7 @@ class client {
         string username;
         while (true) {
             sBuffer = sock.recv();
-            sql = "SELECT username FROM users WHERE username = ?;";
+            sql = "select id from users where username = ?;";
             sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, sBuffer.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW)
@@ -49,7 +51,7 @@ class client {
         }
         sBuffer = sock.recv();
         const char* password = genSha256Hash(sBuffer);
-        sql = "INSERT INTO users (username, password) VALUES (?, ?);";
+        sql = "insert into users (username, password) values (?, ?);";
         sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
         sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_blob(stmt, 2, password, SHA256_DIGEST_LENGTH,
@@ -66,7 +68,7 @@ class client {
         do {
             string username = sock.recv();
             string password = sock.recv();
-            sql = "SELECT id, password FROM users WHERE username = ?;";
+            sql = "select id, password from users where username = ?;";
             sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -77,22 +79,62 @@ class client {
                     sock.send("ok");
                 } else
                     sock.send("not ok");
+                delete[] hash;
             } else
                 sock.send("not ok");
+            sqlite3_finalize(stmt);
         } while (!id);
-        sqlite3_finalize(stmt);
     }
 
     client(int x) : sock(x) {}
 };
 
+class project {
+   public:
+    client owner;
+    string prjName;
+
+    void create(sqlite3* db) {
+        string sql;
+        sqlite3_stmt* stmt;
+        do {
+            sql = "select id from projects where ownerId = " +
+                  std::to_string(owner.id) + " and prjName = ?;";
+            sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            sqlite3_bind_text(stmt, 1, owner.sock.recv().c_str(), -1,
+                              SQLITE_STATIC);
+            if (sqlite3_step(stmt) != SQLITE_ROW) {
+                owner.sock.send("ok");
+            } else
+                owner.sock.send("not ok");
+            sqlite3_finalize(stmt);
+        } while (prjName.empty());
+    }
+    void open(sqlite3* db) {}
+    void download(sqlite3* db) {}
+
+    project(client& x) : owner(x) {}
+};
+
 void handleClient(client client, sqlite3* db) {
     cout << "[+] New kurwa client connected." << endl;
-    if (client.sock.recv() == "Sign Up") {
+    string command = client.sock.recv();
+    if (command == "sign up") {
         client.reg(db);
         client.log(db);
     } else
         client.log(db);
+    project project(client);
+    command = client.sock.recv();
+    if (command == "create prj") {
+        project.create(db);
+        project.open(db);
+    } else if (command == "open prj")
+        project.open(db);
+    else {
+        project.download(db);
+        project.open(db);
+    }
     close(client.sock.sock);
 }
 
@@ -102,15 +144,22 @@ int main(int argc, char* argv[]) {
     path += "users.db";
 
     sqlite3* db;
-    sqlite3_open(path.c_str(), &db);
+    if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+        perror("[!] open");
+        return -1;
+    }
     string sql =
-        "CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username "
-        "TEXT, password BLOB);";
-    sqlite3_exec(db, sql.c_str(), 0, 0, 0);
+        "create table if not exists users(id integer primary key, username "
+        "text, password blob); create table if not exists projects(id integer "
+        "primary key, ownerId integer, prjName text, dir text)";
+    if (sqlite3_exec(db, sql.c_str(), 0, 0, 0) != SQLITE_OK) {
+        perror("[!] exec");
+        return -1;
+    }
 
     int servSock = socket(AF_INET, SOCK_STREAM, 0), opt = 1;
     if (servSock == -1) {
-        cout << "[!] Cannot create socket.";
+        perror("[!] socket");
         return -1;
     }
     setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt,
@@ -121,7 +170,7 @@ int main(int argc, char* argv[]) {
     servAddr.sin_port = htons(8080);
     socklen_t addrLen = sizeof(servAddr);
     if (bind(servSock, (sockaddr*)&servAddr, sizeof(servAddr)) == -1) {
-        cout << "[!] Cannot bind socket.";
+        perror("[!] bind");
         return -1;
     }
     listen(servSock, 5);
