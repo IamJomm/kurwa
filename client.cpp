@@ -5,12 +5,16 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <chrono>
+#include <filesystem>
 #include <iostream>
+#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "sr.hpp"
-
-using std::string, std::vector, std::cout, std::endl, std::cin;
+using std::string, std::vector, std::cout, std::endl, std::cin, nlohmann::json;
+namespace fs = std::filesystem;
+namespace ch = std::chrono;
 
 string drawUI(string title, vector<string> arr) {
     noecho();
@@ -72,16 +76,66 @@ class client {
 };
 
 class project {
+   private:
+    json genJson(string path) {
+        json res;
+        for (const fs::directory_entry &entry : fs::directory_iterator(path)) {
+            if (entry.is_directory())
+                res[entry.path().filename().string()] =
+                    genJson(entry.path().string());
+            else
+                res[entry.path().filename().string()] =
+                    ch::duration_cast<ch::seconds>(
+                        fs::last_write_time(entry).time_since_epoch())
+                        .count();
+        }
+        return res;
+    }
+
+    void newValues(json &js, string path) {
+        for (json::iterator it = js.begin(); it != js.end(); ++it) {
+            if (it.value().is_object()) {
+                cout << path << it.key() << " was created" << endl;
+                newValues(it.value(), path + it.key() + '/');
+            } else
+                cout << path << it.key() << " was created" << endl;
+        }
+    }
+    bool compJson(json &first, json &second, string path) {
+        bool res;
+        for (json::iterator it = first.begin(); it != first.end(); ++it) {
+            if (second.contains(it.key())) {
+                if (it.value().is_object() && second[it.key()].is_object() ||
+                    it.value().is_null() && second[it.key()].is_object())
+                    compJson(it.value(), second[it.key()],
+                             path + it.key() + '/');
+                else if (it.value() != second[it.key()])
+                    cout << path << it.key() << " was changed" << endl,
+                        res = false;
+            } else
+                cout << path << it.key() << " was deleted" << endl, res = false;
+        }
+        for (json::iterator it = second.begin(); it != second.end(); ++it)
+            if (!first.contains(it.key())) {
+                cout << path << it.key() << " was created" << endl;
+                if (it.value().is_object())
+                    newValues(it.value(), path + it.key() + '/');
+                res = false;
+            }
+        return res;
+    }
+
    public:
     client owner;
     string prjName;
     string prjPath;
 
-    void create() {
+    void set() {
         char buffer[1024];
-        printw("Path to your project: ");
+        /*printw("Path to your project: ");
         getstr(buffer);
-        prjPath = buffer;
+        prjPath = buffer;*/
+        prjPath = "/home/jomm/Documents/kurwa/test/";
         do {
             printw("Name of your project: ");
             getstr(buffer);
@@ -90,10 +144,15 @@ class project {
         } while (owner.sock.recv() != "ok");
         prjName = buffer;
     }
-    void open() {}
+    void open() {
+        if (owner.sock.recv() == "not ok") set();
+        json curr = json::parse(owner.sock.recv());
+        json check = genJson(prjPath);
+        if (compJson(curr, check, "./")) curr = check;
+    }
     void download() {}
 
-    project(client& x) : owner(x) {}
+    project(client &x) : owner(x) {}
 };
 
 int main() {
@@ -106,7 +165,7 @@ int main() {
     servAddr.sin_family = AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr.s_addr);
     servAddr.sin_port = htons(8080);
-    if (connect(client.sock.sock, (sockaddr*)&servAddr, sizeof(servAddr)) ==
+    if (connect(client.sock.sock, (sockaddr *)&servAddr, sizeof(servAddr)) ==
         -1) {
         perror("[!] connect");
         return -1;
@@ -126,7 +185,7 @@ int main() {
                     "Download project from server"})[0]) {
         case 'C':
             client.sock.send("create prj");
-            project.create();
+            project.set();
             project.open();
             break;
         case 'O':
