@@ -3,7 +3,6 @@
 #include <numeric>
 #include <vector>
 
-using std::cout, std::endl;
 using std::vector, std::gcd, std::string;
 
 vector<int> primeNums;
@@ -27,19 +26,19 @@ void setKeys(int &n, int &publicKey, int &privateKey) {
     int p = *it;
     primeNums.erase(it);
     int q = primeNums[rand() % primeNums.size()];
-    cout << "p: " << p << " q: " << q << endl;
+    // cout << "p: " << p << " q: " << q << endl;
 
     n = p * q;
-    cout << "n: " << n << endl;
+    // cout << "n: " << n << endl;
     int fi = (p - 1) * (q - 1);
-    cout << "fi: " << fi << endl;
+    // cout << "fi: " << fi << endl;
 
     publicKey = 2;
     while (gcd(fi, publicKey) != 1) publicKey++;
-    cout << "publicKey: " << publicKey << endl;
+    // cout << "publicKey: " << publicKey << endl;
     privateKey = 2;
     while (privateKey * publicKey % fi != 1) privateKey++;
-    cout << "privateKey: " << privateKey << endl;
+    // cout << "privateKey: " << privateKey << endl;
 }
 
 unsigned int powMod(int n, int e, unsigned int ch) {

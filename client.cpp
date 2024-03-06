@@ -86,8 +86,9 @@ class project {
             printw("Name of your project: ");
             getstr(buffer);
             prjName = buffer;
-        } while (owner.sock.recv() == "ok");
-        owner.sock.send(prjName);
+            owner.sock.send(prjName);
+        } while (owner.sock.recv() != "ok");
+        prjName = buffer;
     }
     void open() {}
     void download() {}
@@ -111,7 +112,7 @@ int main() {
         return -1;
     }
 
-    if (drawUI("Choose one option:", {"Sign Up", "Sign In"})[5] == 'U') {
+    if (drawUI("Choose one option:", {"Sign In", "Sign Up"})[5] == 'U') {
         client.sock.send("sign up");
         client.reg();
         client.log();

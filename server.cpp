@@ -4,8 +4,10 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <uuid/uuid.h>
 
 #include <cstdio>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -14,6 +16,7 @@
 #include "sr.hpp"
 
 using std::string, std::thread, std::cout, std::endl;
+namespace fs = std::filesystem;
 
 const char* genSha256Hash(string& input) {
     unsigned char buffer[input.length()];
@@ -92,23 +95,40 @@ class client {
 class project {
    public:
     client owner;
+    string prjPath;
     string prjName;
 
-    void create(sqlite3* db) {
+    void create(sqlite3* db, string& path) {
         string sql;
         sqlite3_stmt* stmt;
         do {
-            sql = "select id from projects where ownerId = " +
-                  std::to_string(owner.id) + " and prjName = ?;";
+            prjName = owner.sock.recv();
+            cout << prjName << endl;
+            sql = "select id from projects where ownerId = ? and prjName = ?;";
             sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
-            sqlite3_bind_text(stmt, 1, owner.sock.recv().c_str(), -1,
-                              SQLITE_STATIC);
+            sqlite3_bind_int(stmt, 1, owner.id);
+            sqlite3_bind_text(stmt, 2, prjName.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) != SQLITE_ROW) {
+                uuid_t uuid;
+                uuid_generate(uuid);
+                char uuidStr[37];
+                uuid_unparse(uuid, uuidStr);
+                fs::create_directory(path + uuidStr);
+                sqlite3_finalize(stmt);
+                sql =
+                    "insert into projects (ownerId, prjName, dir) values (?, "
+                    "?,?);";
+                sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+                sqlite3_bind_int(stmt, 1, owner.id);
+                sqlite3_bind_text(stmt, 2, prjName.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 3, uuidStr, -1, SQLITE_STATIC);
+                sqlite3_step(stmt);
+                prjPath = uuidStr;
                 owner.sock.send("ok");
             } else
                 owner.sock.send("not ok");
             sqlite3_finalize(stmt);
-        } while (prjName.empty());
+        } while (prjPath.empty());
     }
     void open(sqlite3* db) {}
     void download(sqlite3* db) {}
@@ -116,7 +136,7 @@ class project {
     project(client& x) : owner(x) {}
 };
 
-void handleClient(client client, sqlite3* db) {
+void handleClient(client client, sqlite3* db, string path) {
     cout << "[+] New kurwa client connected." << endl;
     string command = client.sock.recv();
     if (command == "sign up") {
@@ -127,7 +147,7 @@ void handleClient(client client, sqlite3* db) {
     project project(client);
     command = client.sock.recv();
     if (command == "create prj") {
-        project.create(db);
+        project.create(db, path);
         project.open(db);
     } else if (command == "open prj")
         project.open(db);
@@ -141,10 +161,9 @@ void handleClient(client client, sqlite3* db) {
 int main(int argc, char* argv[]) {
     string path(argv[0]);
     path = path.substr(0, path.rfind('/') + 1);
-    path += "users.db";
 
     sqlite3* db;
-    if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+    if (sqlite3_open((path + "users.db").c_str(), &db) != SQLITE_OK) {
         perror("[!] open");
         return -1;
     }
@@ -177,7 +196,8 @@ int main(int argc, char* argv[]) {
     cout << "[!] Everything is ok :)" << endl;
     while (true)
         thread(handleClient,
-               client(accept(servSock, (sockaddr*)&servAddr, &addrLen)), db)
+               client(accept(servSock, (sockaddr*)&servAddr, &addrLen)), db,
+               path)
             .detach();
     close(servSock);
     sqlite3_close(db);
