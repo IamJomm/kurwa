@@ -11,7 +11,7 @@ class clsSock {
     void send(const string& msg) {
         int msgSize = msg.size();
         const char* bufferSize = to_string(msgSize).c_str();
-        ::send(sock, bufferSize, 1024, 0);
+        ::send(sock, bufferSize, 10, 0);
         const char* buffer = msg.c_str();
         ::send(sock, buffer, msgSize, 0);
     }
@@ -19,9 +19,9 @@ class clsSock {
         string res;
         int msgSize;
         char buffer[1024];
-        ::recv(sock, buffer, 1024, 0);
+        ::recv(sock, buffer, 10, 0);
         msgSize = stoi(buffer);
-        while (msgSize != 0) {
+        while (msgSize) {
             memset(buffer, 0, sizeof(buffer));
             msgSize -= ::recv(sock, buffer, min(1024, msgSize), 0);
             res.append(buffer);

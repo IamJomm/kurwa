@@ -38,7 +38,7 @@ class client {
         string sql;
         sqlite3_stmt* stmt;
         string username;
-        while (true) {
+        while (username.empty()) {
             sBuffer = sock.recv();
             sql = "select id from users where username = ?;";
             sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
@@ -68,7 +68,7 @@ class client {
     void log(sqlite3* db) {
         string sql;
         sqlite3_stmt* stmt;
-        do {
+        while (!id) {
             string username = sock.recv();
             string password = sock.recv();
             sql = "select id, password from users where username = ?;";
@@ -86,7 +86,7 @@ class client {
             } else
                 sock.send("not ok");
             sqlite3_finalize(stmt);
-        } while (!id);
+        }
     }
 
     client(int x) : sock(x) {}
@@ -101,7 +101,7 @@ class project {
     void create(sqlite3* db, string& path) {
         string sql;
         sqlite3_stmt* stmt;
-        do {
+        while (!prjId) {
             string prjName = owner.sock.recv();
             sql = "select id from projects where ownerId = ? and prjName = ?;";
             sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
@@ -130,7 +130,7 @@ class project {
             } else
                 owner.sock.send("not ok");
             sqlite3_finalize(stmt);
-        } while (!prjId);
+        }
     }
     void open(sqlite3* db, string& path) {
         string sql;
@@ -149,12 +149,22 @@ class project {
         }
         owner.sock.send("ok");
 
-        sql = "select dirTree from projects where id = ?;";
-        sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
-        sqlite3_bind_int(stmt, 1, prjId);
-        sqlite3_step(stmt);
-        owner.sock.send((const char*)sqlite3_column_text(stmt, 0));
-        sqlite3_finalize(stmt);
+        string command;
+        while ((command = owner.sock.recv()) != "quit") {
+            if (command == "push") {
+                sql = "select dirTree from projects where id = ?;";
+                sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+                sqlite3_bind_int(stmt, 1, prjId);
+                sqlite3_step(stmt);
+                owner.sock.send((const char*)sqlite3_column_text(stmt, 0));
+                sqlite3_finalize(stmt);
+                while ((command = owner.sock.recv()) != "done") {
+                    string action = command.substr(0, command.find(' '));
+                    if (action == "createDir") {
+                    }
+                }
+            }
+        }
     }
     void download(sqlite3* db) {}
 
@@ -162,7 +172,7 @@ class project {
 };
 
 void handleClient(client client, sqlite3* db, string path) {
-    cout << "[+] New kurwa client connected." << endl;
+    cout << "[+] Kurwa client connected." << endl;
     string command = client.sock.recv();
     if (command == "sign up") {
         client.reg(db);
@@ -180,6 +190,7 @@ void handleClient(client client, sqlite3* db, string path) {
         project.download(db);
         project.open(db, path);
     }
+    cout << "[+] Client disconnected." << endl;
     close(client.sock.sock);
 }
 
@@ -194,8 +205,10 @@ int main(int argc, char* argv[]) {
     }
     string sql =
         "create table if not exists users(id integer primary key, username "
-        "text, password blob); create table if not exists projects(id integer "
-        "primary key, ownerId integer, prjName text, dir text, dirTree text)";
+        "text, password blob); create table if not exists projects(id "
+        "integer "
+        "primary key, ownerId integer, prjName text, dir text, dirTree "
+        "text)";
     if (sqlite3_exec(db, sql.c_str(), 0, 0, 0) != SQLITE_OK) {
         perror("[!] exec");
         return -1;

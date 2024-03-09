@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -95,34 +96,44 @@ class project {
     void newValues(json &js, string path) {
         for (json::iterator it = js.begin(); it != js.end(); ++it) {
             if (it.value().is_object()) {
-                cout << path << it.key() << " was created" << endl;
+                cout << "folder " << path << it.key() << " was created" << endl;
+                owner.sock.send("createDir " + path + it.key());
                 newValues(it.value(), path + it.key() + '/');
-            } else
-                cout << path << it.key() << " was created" << endl;
+            } else {
+                cout << "file " << path << it.key() << " was created" << endl;
+            }
         }
     }
-    bool compJson(json &first, json &second, string path) {
-        bool res;
+    void compJson(json &first, json &second, string path) {
         for (json::iterator it = first.begin(); it != first.end(); ++it) {
             if (second.contains(it.key())) {
                 if (it.value().is_object() && second[it.key()].is_object() ||
                     it.value().is_null() && second[it.key()].is_object())
                     compJson(it.value(), second[it.key()],
                              path + it.key() + '/');
-                else if (it.value() != second[it.key()])
-                    cout << path << it.key() << " was changed" << endl,
-                        res = false;
-            } else
-                cout << path << it.key() << " was deleted" << endl, res = false;
+                else if (it.value() != second[it.key()]) {
+                    cout << path << it.key() << " was changed" << endl;
+                }
+            } else if (it.value().is_object() || it.value().is_null()) {
+                cout << "folder " << path << it.key() << " was deleted" << endl;
+                owner.sock.send("deleteDir " + path + it.key());
+            } else {
+                cout << "file " << path << it.key() << " was deleted" << endl;
+            }
         }
         for (json::iterator it = second.begin(); it != second.end(); ++it)
             if (!first.contains(it.key())) {
-                cout << path << it.key() << " was created" << endl;
-                if (it.value().is_object())
-                    newValues(it.value(), path + it.key() + '/');
-                res = false;
+                if (it.value().is_object() || it.value().is_null()) {
+                    cout << "folder " << path << it.key() << " was created"
+                         << endl;
+                    owner.sock.send("createDir " + path + it.key());
+                    if (it.value().is_object())
+                        newValues(it.value(), path + it.key() + '/');
+                } else {
+                    cout << "file " << path << it.key() << " was created"
+                         << endl;
+                }
             }
-        return res;
     }
 
    public:
@@ -146,9 +157,20 @@ class project {
     }
     void open() {
         if (owner.sock.recv() == "not ok") set();
-        json curr = json::parse(owner.sock.recv());
-        json check = genJson(prjPath);
-        if (compJson(curr, check, "./")) curr = check;
+        char buffer[20];
+        while (true) {
+            getstr(buffer);
+            if (!strcmp(buffer, "push")) {
+                owner.sock.send("push");
+                json curr = json::parse(owner.sock.recv());
+                json check = genJson(prjPath);
+                compJson(curr, check, "");
+                curr = check;
+            } else if (!strcmp(buffer, "quit")) {
+                owner.sock.send("quit");
+                break;
+            }
+        }
     }
     void download() {}
 
