@@ -35,13 +35,12 @@ class client {
 
     void reg(sqlite3* db) {
         string sBuffer;
-        string sql;
         sqlite3_stmt* stmt;
         string username;
         while (username.empty()) {
             sBuffer = sock.recv();
-            sql = "select id from users where username = ?;";
-            sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            sqlite3_prepare_v2(db, "select id from users where username = ?;",
+                               -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, sBuffer.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW)
                 sock.send("not ok");
@@ -54,8 +53,9 @@ class client {
         }
         sBuffer = sock.recv();
         const char* password = genSha256Hash(sBuffer);
-        sql = "insert into users (username, password) values (?, ?);";
-        sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+        sqlite3_prepare_v2(
+            db, "insert into users (username, password) values (?, ?);", -1,
+            &stmt, 0);
         sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_blob(stmt, 2, password, SHA256_DIGEST_LENGTH,
                           SQLITE_TRANSIENT);
@@ -66,13 +66,13 @@ class client {
     }
 
     void log(sqlite3* db) {
-        string sql;
         sqlite3_stmt* stmt;
         while (!id) {
             string username = sock.recv();
             string password = sock.recv();
-            sql = "select id, password from users where username = ?;";
-            sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            sqlite3_prepare_v2(
+                db, "select id, password from users where username = ?;", -1,
+                &stmt, 0);
             sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW) {
                 const char* dbHash = (const char*)sqlite3_column_text(stmt, 1);
@@ -99,12 +99,13 @@ class project {
     unsigned int prjId = 0;
 
     void create(sqlite3* db, string& path) {
-        string sql;
         sqlite3_stmt* stmt;
         while (!prjId) {
             string prjName = owner.sock.recv();
-            sql = "select id from projects where ownerId = ? and prjName = ?;";
-            sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            sqlite3_prepare_v2(
+                db,
+                "select id from projects where ownerId = ? and prjName = ?;",
+                -1, &stmt, 0);
             sqlite3_bind_int(stmt, 1, owner.id);
             sqlite3_bind_text(stmt, 2, prjName.c_str(), -1, SQLITE_STATIC);
             if (sqlite3_step(stmt) != SQLITE_ROW) {
@@ -114,17 +115,16 @@ class project {
                 uuid_unparse(uuid, uuidStr);
                 fs::create_directory(path + uuidStr);
                 sqlite3_finalize(stmt);
-                sql =
-                    "insert into projects (ownerId, prjName, dir, dirTree) "
-                    "values (?, "
-                    "?,?,'{}');";
-                sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+                sqlite3_prepare_v2(db,
+                                   "insert into projects (ownerId, prjName, "
+                                   "dir, dirTree) values (?, ?, ?, '{}');",
+                                   -1, &stmt, 0);
                 sqlite3_bind_int(stmt, 1, owner.id);
                 sqlite3_bind_text(stmt, 2, prjName.c_str(), -1, SQLITE_STATIC);
                 sqlite3_bind_text(stmt, 3, uuidStr, -1, SQLITE_STATIC);
                 sqlite3_step(stmt);
                 prjId = sqlite3_last_insert_rowid(db);
-                prjPath = uuidStr;
+                prjPath = path + uuidStr + '/';
                 cout << "[+] New project created." << endl;
                 owner.sock.send("ok");
             } else
@@ -132,13 +132,13 @@ class project {
             sqlite3_finalize(stmt);
         }
     }
-    void open(sqlite3* db, string& path) {
-        string sql;
+    void open(sqlite3* db) {
         sqlite3_stmt* stmt;
         while (!prjId) {
             owner.sock.send("not ok");
-            sql = "select id, dir from projects where prjName = ?;";
-            sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+            sqlite3_prepare_v2(
+                db, "select id, dir from projects where prjName = ?;", -1,
+                &stmt, 0);
             sqlite3_bind_text(stmt, 1, owner.sock.recv().c_str(), -1,
                               SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -152,17 +152,37 @@ class project {
         string command;
         while ((command = owner.sock.recv()) != "quit") {
             if (command == "push") {
-                sql = "select dirTree from projects where id = ?;";
-                sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, 0);
+                sqlite3_prepare_v2(db,
+                                   "select dirTree from projects where id = ?;",
+                                   -1, &stmt, 0);
                 sqlite3_bind_int(stmt, 1, prjId);
                 sqlite3_step(stmt);
                 owner.sock.send((const char*)sqlite3_column_text(stmt, 0));
                 sqlite3_finalize(stmt);
-                while ((command = owner.sock.recv()) != "done") {
+                while ((command = owner.sock.recv())[0] != '{') {
                     string action = command.substr(0, command.find(' '));
-                    if (action == "createDir") {
-                    }
+                    if (action == "createDir")
+                        fs::create_directory(
+                            prjPath + command.substr(command.find(' '),
+                                                     command.length() - 1));
+                    else if (action == "removeDir")
+                        fs::remove_all(prjPath +
+                                       command.substr(command.find(' '),
+                                                      command.length() - 1));
+                    else if (action == "createFile") {
+                        //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    } else if (action == "removeFile")
+                        fs::create_directory(
+                            prjPath + command.substr(command.find(' '),
+                                                     command.length() - 1));
                 }
+                sqlite3_prepare_v2(db,
+                                   "update projects set dirTree=? where id=?;",
+                                   -1, &stmt, 0);
+                sqlite3_bind_text(stmt, 1, command.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_int(stmt, 2, prjId);
+                sqlite3_step(stmt);
+                sqlite3_finalize(stmt);
             }
         }
     }
@@ -183,12 +203,12 @@ void handleClient(client client, sqlite3* db, string path) {
     command = client.sock.recv();
     if (command == "create prj") {
         project.create(db, path);
-        project.open(db, path);
+        project.open(db);
     } else if (command == "open prj")
-        project.open(db, path);
+        project.open(db);
     else {
         project.download(db);
-        project.open(db, path);
+        project.open(db);
     }
     cout << "[+] Client disconnected." << endl;
     close(client.sock.sock);

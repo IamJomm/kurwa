@@ -154,6 +154,7 @@ class project {
             owner.sock.send(prjName);
         } while (owner.sock.recv() != "ok");
         prjName = buffer;
+        clear();
     }
     void open() {
         if (owner.sock.recv() == "not ok") set();
@@ -165,7 +166,7 @@ class project {
                 json curr = json::parse(owner.sock.recv());
                 json check = genJson(prjPath);
                 compJson(curr, check, "");
-                curr = check;
+                owner.sock.send(check.dump());
             } else if (!strcmp(buffer, "quit")) {
                 owner.sock.send("quit");
                 break;
