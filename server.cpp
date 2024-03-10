@@ -170,7 +170,9 @@ class project {
                                        command.substr(command.find(' '),
                                                       command.length() - 1));
                     else if (action == "createFile") {
-                        //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        owner.sock.recvFile(
+                            prjPath + command.substr(command.find(' '),
+                                                     command.length() - 1));
                     } else if (action == "removeFile")
                         fs::create_directory(
                             prjPath + command.substr(command.find(' '),

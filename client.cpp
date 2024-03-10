@@ -101,6 +101,8 @@ class project {
                 newValues(it.value(), path + it.key() + '/');
             } else {
                 cout << "file " << path << it.key() << " was created" << endl;
+                owner.sock.send("createFile " + path + it.key());
+                owner.sock.sendFile(prjPath + path + it.key());
             }
         }
     }
@@ -113,12 +115,15 @@ class project {
                              path + it.key() + '/');
                 else if (it.value() != second[it.key()]) {
                     cout << path << it.key() << " was changed" << endl;
+                    owner.sock.send("createFile " + path + it.key());
+                    owner.sock.sendFile(prjPath + path + it.key());
                 }
             } else if (it.value().is_object() || it.value().is_null()) {
                 cout << "folder " << path << it.key() << " was deleted" << endl;
-                owner.sock.send("deleteDir " + path + it.key());
+                owner.sock.send("removeDir " + path + it.key());
             } else {
                 cout << "file " << path << it.key() << " was deleted" << endl;
+                owner.sock.send("removeFile " + path + it.key());
             }
         }
         for (json::iterator it = second.begin(); it != second.end(); ++it)
@@ -132,6 +137,8 @@ class project {
                 } else {
                     cout << "file " << path << it.key() << " was created"
                          << endl;
+                    owner.sock.send("createFile " + path + it.key());
+                    owner.sock.sendFile(prjPath + path + it.key());
                 }
             }
     }
