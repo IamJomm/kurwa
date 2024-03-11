@@ -52,26 +52,30 @@ class client {
         char buffer[1024];
         do {
             clear();
-            printw("Sign Up\nEnter Username: ");
+            /*printw("Sign Up\nEnter Username: ");
             getstr(buffer);
-            sock.send(buffer);
+            sock.send(buffer);*/
+            sock.send("aaa");
         } while (sock.recv() != "ok");
-        printw("Enter Password: ");
+        /*printw("Enter Password: ");
         getstr(buffer);
-        sock.send(buffer);
+        sock.send(buffer);*/
+        sock.send("aaa");
         clear();
     }
 
     void log() {
         char buffer[1024];
         do {
-            printw("Sign In\nEnter Username: ");
+            /*printw("Sign In\nEnter Username: ");
             getstr(buffer);
             sock.send(buffer);
             printw("Enter Password: ");
             getstr(buffer);
             sock.send(buffer);
-            clear();
+            clear();*/
+            sock.send("aaa");
+            sock.send("aaa");
         } while (sock.recv() != "ok");
     }
 };
@@ -155,12 +159,12 @@ class project {
         prjPath = buffer;*/
         prjPath = "/home/jomm/Documents/kurwa/test/";
         do {
-            printw("Name of your project: ");
+            /*printw("Name of your project: ");
             getstr(buffer);
-            prjName = buffer;
+            prjName = buffer;*/
+            prjName = "aaa";
             owner.sock.send(prjName);
         } while (owner.sock.recv() != "ok");
-        prjName = buffer;
         clear();
     }
     void open() {

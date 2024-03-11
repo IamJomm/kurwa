@@ -132,7 +132,7 @@ class project {
             sqlite3_finalize(stmt);
         }
     }
-    void open(sqlite3* db) {
+    void open(sqlite3* db, string& path) {
         sqlite3_stmt* stmt;
         while (!prjId) {
             owner.sock.send("not ok");
@@ -143,7 +143,8 @@ class project {
                               SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW) {
                 prjId = sqlite3_column_int(stmt, 0);
-                prjPath = (const char*)sqlite3_column_text(stmt, 1);
+                prjPath =
+                    path + (const char*)sqlite3_column_text(stmt, 1) + '/';
             }
             sqlite3_finalize(stmt);
         }
@@ -160,6 +161,7 @@ class project {
                 owner.sock.send((const char*)sqlite3_column_text(stmt, 0));
                 sqlite3_finalize(stmt);
                 while ((command = owner.sock.recv())[0] != '{') {
+                    cout << command << endl;
                     string action = command.substr(0, command.find(' '));
                     if (action == "createDir")
                         fs::create_directory(
@@ -205,12 +207,12 @@ void handleClient(client client, sqlite3* db, string path) {
     command = client.sock.recv();
     if (command == "create prj") {
         project.create(db, path);
-        project.open(db);
+        project.open(db, path);
     } else if (command == "open prj")
-        project.open(db);
+        project.open(db, path);
     else {
         project.download(db);
-        project.open(db);
+        project.open(db, path);
     }
     cout << "[+] Client disconnected." << endl;
     close(client.sock.sock);
