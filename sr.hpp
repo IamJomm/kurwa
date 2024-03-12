@@ -30,7 +30,7 @@ class clsSock {
         return res;
     }
 
-    void sendFile(const string& path) {
+    void sendFile(const string& path, void (*callback)(int) = nullptr) {
         ifstream input(path);
         input.seekg(0, ios::end);
         long fileSize = input.tellg();

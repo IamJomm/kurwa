@@ -97,54 +97,64 @@ class project {
         return res;
     }
 
-    void newValues(json &js, string path) {
-        for (json::iterator it = js.begin(); it != js.end(); ++it) {
-            if (it.value().is_object()) {
-                cout << "folder " << path << it.key() << " was created" << endl;
-                owner.sock.send("createDir " + path + it.key());
-                newValues(it.value(), path + it.key() + '/');
-            } else {
-                cout << "file " << path << it.key() << " was created" << endl;
-                owner.sock.send("createFile " + path + it.key());
-                owner.sock.sendFile(prjPath + path + it.key());
-            }
-        }
-    }
-    void compJson(json &first, json &second, string path) {
-        for (json::iterator it = first.begin(); it != first.end(); ++it) {
-            if (second.contains(it.key())) {
-                if (it.value().is_object() && second[it.key()].is_object() ||
-                    it.value().is_null() && second[it.key()].is_object())
-                    compJson(it.value(), second[it.key()],
+    void compJson(json &oldjs, json &newjs, string path) {
+        for (json::iterator it = oldjs.begin(); it != oldjs.end(); ++it) {
+            if (newjs.contains(it.key())) {
+                if (it.value().is_number() && newjs[it.key()].is_object()) {
+                    printw(
+                        "File ./%s%s was deleted.\nFolder ./%s%s was "
+                        "created.\n",
+                        path.c_str(), it.key().c_str(), path.c_str(),
+                        it.key().c_str());
+                    owner.sock.send("removeFile " + path + it.key());
+                    owner.sock.send("createFolder " + path + it.key());
+                    json temp;
+                    compJson(temp, newjs[it.key()], path + it.key() + '/');
+                } else if (it.value().is_object() &&
+                           newjs[it.key()].is_number()) {
+                    printw(
+                        "Folder ./%s%s was deleted.\nFile ./%s%s was "
+                        "created.\n",
+                        path.c_str(), it.key().c_str(), path.c_str(),
+                        it.key().c_str());
+                    owner.sock.send("removeFolder " + path + it.key());
+                    owner.sock.send("createFile " + path + it.key());
+                    owner.sock.sendFile(path + it.key());
+                } else if (newjs[it.key()].is_object()) {
+                    compJson(it.value(), newjs[it.key()],
                              path + it.key() + '/');
-                else if (it.value() != second[it.key()]) {
-                    cout << path << it.key() << " was changed" << endl;
+                } else if (it.value() != newjs[it.key()]) {
+                    printw("File ./%s%s was changed.\n", path.c_str(),
+                           it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
-                    owner.sock.sendFile(prjPath + path + it.key());
                 }
-            } else if (it.value().is_object() || it.value().is_null()) {
-                cout << "folder " << path << it.key() << " was deleted" << endl;
-                owner.sock.send("removeDir " + path + it.key());
             } else {
-                cout << "file " << path << it.key() << " was deleted" << endl;
-                owner.sock.send("removeFile " + path + it.key());
+                if (it.value().is_object() || it.value().is_null()) {
+                    printw("Folder ./%s%s was deleted.\n", path.c_str(),
+                           it.key().c_str());
+                    owner.sock.send("removeFolder " + path + it.key());
+                } else {
+                    printw("File ./%s%s was deleted.\n", path.c_str(),
+                           it.key().c_str());
+                    owner.sock.send("removeFile " + path + it.key());
+                }
             }
         }
-        for (json::iterator it = second.begin(); it != second.end(); ++it)
-            if (!first.contains(it.key())) {
+        for (json::iterator it = newjs.begin(); it != newjs.end(); ++it) {
+            if (!oldjs.contains(it.key())) {
                 if (it.value().is_object() || it.value().is_null()) {
-                    cout << "folder " << path << it.key() << " was created"
-                         << endl;
-                    owner.sock.send("createDir " + path + it.key());
-                    if (it.value().is_object())
-                        newValues(it.value(), path + it.key() + '/');
+                    printw("Folder ./%s%s was created.\n", path.c_str(),
+                           it.key().c_str());
+                    owner.sock.send("createFolder " + path + it.key());
+                    json temp;
+                    compJson(temp, it.value(), path + it.key() + '/');
                 } else {
-                    cout << "file " << path << it.key() << " was created"
-                         << endl;
+                    printw("File ./%s%s was created.\n", path.c_str(),
+                           it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
-                    owner.sock.sendFile(prjPath + path + it.key());
                 }
             }
+        }
     }
 
    public:
@@ -171,6 +181,7 @@ class project {
         if (owner.sock.recv() == "not ok") set();
         char buffer[20];
         while (true) {
+            printw("> ");
             getstr(buffer);
             if (!strcmp(buffer, "push")) {
                 owner.sock.send("push");

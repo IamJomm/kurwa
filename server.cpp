@@ -165,20 +165,16 @@ class project {
                     string action = command.substr(0, command.find(' '));
                     if (action == "createDir")
                         fs::create_directory(
-                            prjPath + command.substr(command.find(' '),
-                                                     command.length() - 1));
+                            prjPath + command.substr(command.find(' ') + 1));
                     else if (action == "removeDir")
                         fs::remove_all(prjPath +
-                                       command.substr(command.find(' '),
-                                                      command.length() - 1));
-                    else if (action == "createFile") {
+                                       command.substr(command.find(' ') + 1));
+                    else if (action == "createFile")
                         owner.sock.recvFile(
-                            prjPath + command.substr(command.find(' '),
-                                                     command.length() - 1));
-                    } else if (action == "removeFile")
+                            prjPath + command.substr(command.find(' ') + 1));
+                    else if (action == "removeFile")
                         fs::create_directory(
-                            prjPath + command.substr(command.find(' '),
-                                                     command.length() - 1));
+                            prjPath + command.substr(command.find(' ') + 1));
                 }
                 sqlite3_prepare_v2(db,
                                    "update projects set dirTree=? where id=?;",

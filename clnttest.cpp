@@ -36,8 +36,7 @@ void compJson(json &oldjs, json &newjs, string path) {
             } else if (it.value().is_object() && newjs[it.key()].is_number()) {
                 cout << "folder " << path + it.key() << " was deleted" << endl
                      << "file " << path + it.key() << " was created" << endl;
-            } else if (it.value().is_object() && newjs[it.key()].is_object() ||
-                       it.value().is_null() && newjs[it.key()].is_object()) {
+            } else if (newjs[it.key()].is_object()) {
                 compJson(it.value(), newjs[it.key()], path + it.key() + '/');
             } else if (it.value() != newjs[it.key()]) {
                 cout << "file " << path + it.key() << " was changed" << endl;
@@ -52,7 +51,7 @@ void compJson(json &oldjs, json &newjs, string path) {
     }
     for (json::iterator it = newjs.begin(); it != newjs.end(); ++it) {
         if (!oldjs.contains(it.key())) {
-            if (it.value().is_object()) {
+            if (it.value().is_object() || it.value().is_null()) {
                 cout << "folder " << path + it.key() << " was created" << endl;
                 json temp;
                 compJson(temp, it.value(), path + it.key() + '/');
