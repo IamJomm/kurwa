@@ -5,14 +5,26 @@
 #include <unistd.h>
 
 #include <chrono>
-#include <iostream>
+#include <cmath>
 #include <thread>
 
 #include "sr.hpp"
 
 using namespace std;
 
-void progressBar(int x) {}
+void progressBar(long prog, long total) {
+    int y, x;
+    getyx(stdscr, y, x);
+    const int len = 30;
+    int percent = ceil(float(len) / total * prog);
+    wchar_t str[len + 1];
+    for (int i = 0; i < percent; i++) str[i] = L'\u2588';
+    for (int i = percent; i < len; i++) str[i] = L'\u2592';
+    str[len] = L'\0';
+    mvprintw(y, 0, "|%ls|", str);
+    if (prog == total) addch('\n');
+    refresh();
+}
 
 void serverSock() {
     int servSock = socket(AF_INET, SOCK_STREAM, 0), opt = 1;
@@ -26,9 +38,10 @@ void serverSock() {
     bind(servSock, (sockaddr *)&servAddr, sizeof(servAddr));
     listen(servSock, 3);
     clsSock client(accept(servSock, (sockaddr *)&servAddr, &addrLen));
-    printw(client.recv().c_str());
+    printw("%s\n", client.recv().c_str());
 
     client.recvFile("/home/jomm/Documents/kurwa/test/aaa1");
+    client.recvFile("/home/jomm/Documents/kurwa/test/Asakusa1.png");
     client.recvFile("/home/jomm/Documents/kurwa/test/abc1");
 
     close(servSock);
@@ -44,19 +57,23 @@ void clientSock() {
     client.send("ok");
 
     client.sendFile("/home/jomm/Documents/kurwa/test/aaa", progressBar);
+    client.sendFile("/home/jomm/Documents/kurwa/test/Asakusa.png", progressBar);
     client.sendFile("/home/jomm/Documents/kurwa/test/abc", progressBar);
 
     close(client.sock);
 }
 
 int main() {
+    setlocale(LC_ALL, "");
     initscr();
-    raw();
-    keypad(stdscr, TRUE);
+    scrollok(stdscr, TRUE);
+
     thread serverThread(serverSock);
     this_thread::sleep_for(chrono::seconds(1));
     thread clientThread(clientSock);
     serverThread.join();
     clientThread.join();
+
+    getch();
     endwin();
 }

@@ -30,7 +30,7 @@ class clsSock {
         return res;
     }
 
-    void sendFile(const string& path, void (*callback)(int) = nullptr) {
+    void sendFile(const string& path, void (*callback)(long, long) = nullptr) {
         ifstream input(path);
         input.seekg(0, ios::end);
         long fileSize = input.tellg();
@@ -41,19 +41,26 @@ class clsSock {
             input.read(buffer, sizeof(buffer));
             ::send(sock, buffer, input.gcount(), 0);
             memset(buffer, 0, sizeof(buffer));
+            if (callback) {
+                long temp = input.tellg();
+                callback((temp == -1 ? fileSize : temp), fileSize);
+            }
         }
     }
-    void recvFile(const string& path) {
+    void recvFile(const string& path, void (*callback)(long, long) = nullptr) {
         ofstream output(path);
         char buffer[1024];
         ::recv(sock, buffer, sizeof(long), 0);
         long fileSize;
         memcpy(&fileSize, buffer, sizeof(long));
-        while (fileSize) {
+        long bytesLeft = fileSize;
+        while (bytesLeft) {
             memset(buffer, 0, sizeof(buffer));
-            int bytesRecvd = ::recv(sock, buffer, min((long)1024, fileSize), 0);
-            fileSize -= bytesRecvd;
+            int bytesRecvd =
+                ::recv(sock, buffer, min((long)1024, bytesLeft), 0);
+            bytesLeft -= bytesRecvd;
             output.write(buffer, bytesRecvd);
+            if (callback) callback(fileSize - bytesLeft, fileSize);
         }
     }
 

@@ -8,12 +8,11 @@
 #include <chrono>
 #include <cstring>
 #include <filesystem>
-#include <iostream>
 #include <nlohmann/json.hpp>
 #include <vector>
 
 #include "sr.hpp"
-using std::string, std::vector, std::cout, std::endl, std::cin, nlohmann::json;
+using std::string, std::vector, nlohmann::json;
 namespace fs = std::filesystem;
 namespace ch = std::chrono;
 
@@ -42,6 +41,19 @@ string drawUI(string title, vector<string> arr) {
     }
     echo();
     return arr[choice];
+}
+void progressBar(long prog, long total) {
+    int y, x;
+    getyx(stdscr, y, x);
+    const int len = 30;
+    int percent = ceil(float(len) / total * prog);
+    wchar_t str[len + 1];
+    for (int i = 0; i < percent; i++) str[i] = L'\u2588';
+    for (int i = percent; i < len; i++) str[i] = L'\u2592';
+    str[len] = L'\0';
+    mvprintw(y, 0, "|%ls|", str);
+    if (prog == total) addch('\n');
+    refresh();
 }
 
 class client {
@@ -119,7 +131,7 @@ class project {
                         it.key().c_str());
                     owner.sock.send("removeFolder " + path + it.key());
                     owner.sock.send("createFile " + path + it.key());
-                    owner.sock.sendFile(path + it.key());
+                    owner.sock.sendFile(prjPath + path + it.key(), progressBar);
                 } else if (newjs[it.key()].is_object()) {
                     compJson(it.value(), newjs[it.key()],
                              path + it.key() + '/');
@@ -127,6 +139,7 @@ class project {
                     printw("File ./%s%s was changed.\n", path.c_str(),
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
+                    owner.sock.sendFile(prjPath + path + it.key(), progressBar);
                 }
             } else {
                 if (it.value().is_object() || it.value().is_null()) {
@@ -152,6 +165,7 @@ class project {
                     printw("File ./%s%s was created.\n", path.c_str(),
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
+                    owner.sock.sendFile(prjPath + path + it.key(), progressBar);
                 }
             }
         }
@@ -201,8 +215,9 @@ class project {
 };
 
 int main() {
+    setlocale(LC_ALL, "");
     initscr();
-    raw();
+    scrollok(stdscr, TRUE);
     keypad(stdscr, TRUE);
 
     client client;
