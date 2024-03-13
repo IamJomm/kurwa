@@ -173,8 +173,8 @@ class project {
                         owner.sock.recvFile(
                             prjPath + command.substr(command.find(' ') + 1));
                     else if (action == "removeFile")
-                        fs::create_directory(
-                            prjPath + command.substr(command.find(' ') + 1));
+                        fs::remove(prjPath +
+                                   command.substr(command.find(' ') + 1));
                 }
                 sqlite3_prepare_v2(db,
                                    "update projects set dirTree=? where id=?;",

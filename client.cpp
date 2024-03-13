@@ -119,7 +119,7 @@ class project {
                         path.c_str(), it.key().c_str(), path.c_str(),
                         it.key().c_str());
                     owner.sock.send("removeFile " + path + it.key());
-                    owner.sock.send("createFolder " + path + it.key());
+                    owner.sock.send("createDir " + path + it.key());
                     json temp;
                     compJson(temp, newjs[it.key()], path + it.key() + '/');
                 } else if (it.value().is_object() &&
@@ -129,7 +129,7 @@ class project {
                         "created.\n",
                         path.c_str(), it.key().c_str(), path.c_str(),
                         it.key().c_str());
-                    owner.sock.send("removeFolder " + path + it.key());
+                    owner.sock.send("removeDir " + path + it.key());
                     owner.sock.send("createFile " + path + it.key());
                     owner.sock.sendFile(prjPath + path + it.key(), progressBar);
                 } else if (newjs[it.key()].is_object()) {
@@ -145,7 +145,7 @@ class project {
                 if (it.value().is_object() || it.value().is_null()) {
                     printw("Folder ./%s%s was deleted.\n", path.c_str(),
                            it.key().c_str());
-                    owner.sock.send("removeFolder " + path + it.key());
+                    owner.sock.send("removeDir " + path + it.key());
                 } else {
                     printw("File ./%s%s was deleted.\n", path.c_str(),
                            it.key().c_str());
@@ -158,7 +158,7 @@ class project {
                 if (it.value().is_object() || it.value().is_null()) {
                     printw("Folder ./%s%s was created.\n", path.c_str(),
                            it.key().c_str());
-                    owner.sock.send("createFolder " + path + it.key());
+                    owner.sock.send("createDir " + path + it.key());
                     json temp;
                     compJson(temp, it.value(), path + it.key() + '/');
                 } else {

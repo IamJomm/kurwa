@@ -38,7 +38,6 @@ void serverSock() {
     bind(servSock, (sockaddr *)&servAddr, sizeof(servAddr));
     listen(servSock, 3);
     clsSock client(accept(servSock, (sockaddr *)&servAddr, &addrLen));
-    printw("%s\n", client.recv().c_str());
 
     client.recvFile("/home/jomm/Documents/kurwa/test/aaa1");
     client.recvFile("/home/jomm/Documents/kurwa/test/Asakusa1.png");
@@ -54,10 +53,12 @@ void clientSock() {
     inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr.s_addr);
     servAddr.sin_port = htons(8080);
     connect(client.sock, (sockaddr *)&servAddr, sizeof(servAddr));
-    client.send("ok");
 
+    printw("aaa\n");
     client.sendFile("/home/jomm/Documents/kurwa/test/aaa", progressBar);
+    printw("Asakusa.png\n");
     client.sendFile("/home/jomm/Documents/kurwa/test/Asakusa.png", progressBar);
+    printw("abc\n");
     client.sendFile("/home/jomm/Documents/kurwa/test/abc", progressBar);
 
     close(client.sock);

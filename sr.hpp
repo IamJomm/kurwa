@@ -24,7 +24,8 @@ class clsSock {
         memcpy(&msgSize, buffer, sizeof(short));
         while (msgSize) {
             memset(buffer, 0, sizeof(buffer));
-            msgSize -= ::recv(sock, buffer, min((short)1024, msgSize), 0);
+            msgSize -=
+                ::recv(sock, buffer, min((short)sizeof(buffer), msgSize), 0);
             res.append(buffer);
         }
         return res;
@@ -37,14 +38,14 @@ class clsSock {
         input.seekg(0, ios::beg);
         ::send(sock, &fileSize, sizeof(fileSize), 0);
         char buffer[1024];
-        while (!input.eof()) {
-            input.read(buffer, sizeof(buffer));
-            ::send(sock, buffer, input.gcount(), 0);
+        long bytesLeft = fileSize;
+        while (bytesLeft) {
+            short bytesToSend = min(bytesLeft, (long)sizeof(buffer));
+            input.read(buffer, bytesToSend);
+            ::send(sock, buffer, bytesToSend, 0);
+            bytesLeft -= bytesToSend;
             memset(buffer, 0, sizeof(buffer));
-            if (callback) {
-                long temp = input.tellg();
-                callback((temp == -1 ? fileSize : temp), fileSize);
-            }
+            if (callback) callback(fileSize - bytesLeft, fileSize);
         }
     }
     void recvFile(const string& path, void (*callback)(long, long) = nullptr) {
@@ -56,10 +57,10 @@ class clsSock {
         long bytesLeft = fileSize;
         while (bytesLeft) {
             memset(buffer, 0, sizeof(buffer));
-            int bytesRecvd =
-                ::recv(sock, buffer, min((long)1024, bytesLeft), 0);
-            bytesLeft -= bytesRecvd;
-            output.write(buffer, bytesRecvd);
+            short bytesToRecv = min(bytesLeft, (long)sizeof(buffer));
+            ::recv(sock, buffer, bytesToRecv, 0);
+            output.write(buffer, bytesToRecv);
+            bytesLeft -= bytesToRecv;
             if (callback) callback(fileSize - bytesLeft, fileSize);
         }
     }
