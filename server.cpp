@@ -39,6 +39,7 @@ class client {
         string username;
         while (username.empty()) {
             sBuffer = sock.recv();
+            cout << sBuffer << endl;
             sqlite3_prepare_v2(db, "select id from users where username = ?;",
                                -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, sBuffer.c_str(), -1, SQLITE_STATIC);
@@ -47,11 +48,11 @@ class client {
             else {
                 username = sBuffer;
                 sock.send("ok");
-                break;
             }
             sqlite3_finalize(stmt);
         }
         sBuffer = sock.recv();
+        cout << sBuffer << endl;
         const char* password = genSha256Hash(sBuffer);
         sqlite3_prepare_v2(
             db, "insert into users (username, password) values (?, ?);", -1,
@@ -70,19 +71,18 @@ class client {
         while (!id) {
             string username = sock.recv();
             string password = sock.recv();
+            cout << username << ' ' << password << endl;
             sqlite3_prepare_v2(
-                db, "select id, password from users where username = ?;", -1,
-                &stmt, 0);
+                db, "select id from users where username = ? and password = ?;",
+                -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+            const char* hash = genSha256Hash(password);
+            sqlite3_bind_blob(stmt, 2, hash, SHA256_DIGEST_LENGTH,
+                              SQLITE_TRANSIENT);
+            delete[] hash;
             if (sqlite3_step(stmt) == SQLITE_ROW) {
-                const char* dbHash = (const char*)sqlite3_column_text(stmt, 1);
-                const char* hash = genSha256Hash(password);
-                if (!strcmp(dbHash, hash)) {
-                    id = sqlite3_column_int(stmt, 0);
-                    sock.send("ok");
-                } else
-                    sock.send("not ok");
-                delete[] hash;
+                id = sqlite3_column_int(stmt, 0);
+                sock.send("ok");
             } else
                 sock.send("not ok");
             sqlite3_finalize(stmt);
@@ -136,10 +136,12 @@ class project {
         sqlite3_stmt* stmt;
         while (!prjId) {
             owner.sock.send("not ok");
-            sqlite3_prepare_v2(
-                db, "select id, dir from projects where prjName = ?;", -1,
-                &stmt, 0);
-            sqlite3_bind_text(stmt, 1, owner.sock.recv().c_str(), -1,
+            sqlite3_prepare_v2(db,
+                               "select id, dir from projects where ownerId = ? "
+                               "and prjName = ?;",
+                               -1, &stmt, 0);
+            sqlite3_bind_int(stmt, 1, owner.id);
+            sqlite3_bind_text(stmt, 2, owner.sock.recv().c_str(), -1,
                               SQLITE_STATIC);
             if (sqlite3_step(stmt) == SQLITE_ROW) {
                 prjId = sqlite3_column_int(stmt, 0);
@@ -161,7 +163,6 @@ class project {
                 owner.sock.send((const char*)sqlite3_column_text(stmt, 0));
                 sqlite3_finalize(stmt);
                 while ((command = owner.sock.recv())[0] != '{') {
-                    cout << command << endl;
                     string action = command.substr(0, command.find(' '));
                     if (action == "createDir")
                         fs::create_directory(
@@ -210,8 +211,8 @@ void handleClient(client client, sqlite3* db, string path) {
         project.download(db);
         project.open(db, path);
     }
-    cout << "[+] Client disconnected." << endl;
     close(client.sock.sock);
+    cout << "[-] Client disconnected." << endl;
 }
 
 int main(int argc, char* argv[]) {

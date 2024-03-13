@@ -8,7 +8,7 @@
 #include <cmath>
 #include <thread>
 
-#include "sr.hpp"
+#include "../sr.hpp"
 
 using namespace std;
 
@@ -39,9 +39,9 @@ void serverSock() {
     listen(servSock, 3);
     clsSock client(accept(servSock, (sockaddr *)&servAddr, &addrLen));
 
-    client.recvFile("/home/jomm/Documents/kurwa/test/aaa1");
-    client.recvFile("/home/jomm/Documents/kurwa/test/Asakusa1.png");
-    client.recvFile("/home/jomm/Documents/kurwa/test/abc1");
+    client.recvFile("/home/jomm/Documents/kurwa/client/test/aaa1");
+    client.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
+    client.recvFile("/home/jomm/Documents/kurwa/client/test/bbb1");
 
     close(servSock);
 }
@@ -55,11 +55,12 @@ void clientSock() {
     connect(client.sock, (sockaddr *)&servAddr, sizeof(servAddr));
 
     printw("aaa\n");
-    client.sendFile("/home/jomm/Documents/kurwa/test/aaa", progressBar);
+    client.sendFile("/home/jomm/Documents/kurwa/client/test/aaa", progressBar);
     printw("Asakusa.png\n");
-    client.sendFile("/home/jomm/Documents/kurwa/test/Asakusa.png", progressBar);
+    client.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa.png",
+                    progressBar);
     printw("abc\n");
-    client.sendFile("/home/jomm/Documents/kurwa/test/abc", progressBar);
+    client.sendFile("/home/jomm/Documents/kurwa/client/test/bbb", progressBar);
 
     close(client.sock);
 }

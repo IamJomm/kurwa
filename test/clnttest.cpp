@@ -63,9 +63,9 @@ void compJson(json &oldjs, json &newjs, string path) {
 }
 
 int main() {
-    json curr = genJson("/home/jomm/Documents/kurwa/test");
+    json curr = genJson("/home/jomm/Documents/kurwa/client/test");
     while (true) {
-        json check = genJson("/home/jomm/Documents/kurwa/test");
+        json check = genJson("/home/jomm/Documents/kurwa/client/test");
         compJson(curr, check, "./");
         curr = check;
         this_thread::sleep_for(ch::seconds(1));
