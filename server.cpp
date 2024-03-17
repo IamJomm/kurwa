@@ -15,7 +15,7 @@
 #include "encryption.hpp"
 #include "sr.hpp"
 
-using std::string, std::thread, std::cout, std::endl, std::to_string;
+using std::string, std::thread, std::cout, std::endl;
 namespace fs = std::filesystem;
 
 const char* genSha256Hash(string& input) {
@@ -39,7 +39,6 @@ class client {
         string username;
         while (username.empty()) {
             sBuffer = sock.recv();
-            cout << sBuffer << endl;
             sqlite3_prepare_v2(db, "select id from users where username = ?;",
                                -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, sBuffer.c_str(), -1, SQLITE_STATIC);
@@ -52,7 +51,6 @@ class client {
             sqlite3_finalize(stmt);
         }
         sBuffer = sock.recv();
-        cout << sBuffer << endl;
         const char* password = genSha256Hash(sBuffer);
         sqlite3_prepare_v2(
             db, "insert into users (username, password) values (?, ?);", -1,
@@ -71,7 +69,6 @@ class client {
         while (!id) {
             string username = sock.recv();
             string password = sock.recv();
-            cout << username << ' ' << password << endl;
             sqlite3_prepare_v2(
                 db, "select id from users where username = ? and password = ?;",
                 -1, &stmt, 0);
@@ -98,7 +95,7 @@ class project {
     string prjPath;
     unsigned int prjId = 0;
 
-    void create(sqlite3* db, string& path) {
+    void create(sqlite3* db) {
         sqlite3_stmt* stmt;
         while (!prjId) {
             string prjName = owner.sock.recv();
@@ -113,7 +110,8 @@ class project {
                 uuid_generate(uuid);
                 char uuidStr[37];
                 uuid_unparse(uuid, uuidStr);
-                fs::create_directory(path + uuidStr);
+                prjPath = prjPath + uuidStr + '/';
+                fs::create_directory(prjPath);
                 sqlite3_finalize(stmt);
                 sqlite3_prepare_v2(db,
                                    "insert into projects (ownerId, prjName, "
@@ -124,7 +122,6 @@ class project {
                 sqlite3_bind_text(stmt, 3, uuidStr, -1, SQLITE_STATIC);
                 sqlite3_step(stmt);
                 prjId = sqlite3_last_insert_rowid(db);
-                prjPath = path + uuidStr + '/';
                 cout << "[+] New project created." << endl;
                 owner.sock.send("ok");
             } else
@@ -132,10 +129,11 @@ class project {
             sqlite3_finalize(stmt);
         }
     }
-    void open(sqlite3* db, string& path) {
+
+    void set(sqlite3* db) {
         sqlite3_stmt* stmt;
+
         while (!prjId) {
-            owner.sock.send("not ok");
             sqlite3_prepare_v2(db,
                                "select id, dir from projects where ownerId = ? "
                                "and prjName = ?;",
@@ -146,11 +144,16 @@ class project {
             if (sqlite3_step(stmt) == SQLITE_ROW) {
                 prjId = sqlite3_column_int(stmt, 0);
                 prjPath =
-                    path + (const char*)sqlite3_column_text(stmt, 1) + '/';
-            }
+                    prjPath + (const char*)sqlite3_column_text(stmt, 1) + '/';
+                owner.sock.send("ok");
+            } else
+                owner.sock.send("not ok");
             sqlite3_finalize(stmt);
         }
-        owner.sock.send("ok");
+    }
+
+    void open(sqlite3* db) {
+        sqlite3_stmt* stmt;
 
         string command;
         while ((command = owner.sock.recv()) != "quit") {
@@ -187,29 +190,46 @@ class project {
             }
         }
     }
-    void download(sqlite3* db) {}
 
-    project(client& x) : owner(x) {}
+    void download(const string& path) {
+        for (const fs::directory_entry& entry : fs::directory_iterator(path)) {
+            string filePath = entry.path().string();
+            if (entry.is_directory()) {
+                owner.sock.send("createDir " +
+                                filePath.substr(prjPath.length()));
+                download(filePath);
+            } else {
+                owner.sock.send("createFile " +
+                                filePath.substr(prjPath.length()));
+                owner.sock.sendFile(filePath);
+            }
+        }
+    }
+
+    project(client& x, const string& y) : owner(x), prjPath(y) {}
 };
 
 void handleClient(client client, sqlite3* db, string path) {
     cout << "[+] Kurwa client connected." << endl;
     string command = client.sock.recv();
-    if (command == "sign up") {
+    if (command == "signUp") {
         client.reg(db);
         client.log(db);
-    } else
+    } else if (command == "signIn")
         client.log(db);
-    project project(client);
+    project project(client, path);
     command = client.sock.recv();
-    if (command == "create prj") {
-        project.create(db, path);
-        project.open(db, path);
-    } else if (command == "open prj")
-        project.open(db, path);
-    else {
-        project.download(db);
-        project.open(db, path);
+    if (command == "createPrj") {
+        project.create(db);
+        project.open(db);
+    } else if (command == "openPrj") {
+        project.set(db);
+        project.open(db);
+    } else if (command == "downloadPrj") {
+        project.set(db);
+        project.download(project.prjPath);
+        client.sock.send("done");
+        project.open(db);
     }
     close(client.sock.sock);
     cout << "[-] Client disconnected." << endl;
@@ -224,13 +244,12 @@ int main(int argc, char* argv[]) {
         perror("[!] open");
         return -1;
     }
-    string sql =
-        "create table if not exists users(id integer primary key, username "
-        "text, password blob); create table if not exists projects(id "
-        "integer "
-        "primary key, ownerId integer, prjName text, dir text, dirTree "
-        "text)";
-    if (sqlite3_exec(db, sql.c_str(), 0, 0, 0) != SQLITE_OK) {
+    if (sqlite3_exec(db,
+                     "create table if not exists users(id integer primary key, "
+                     "username text, password blob); create table if not "
+                     "exists projects(id integer primary key, ownerId integer, "
+                     "prjName text, dir text, dirTree text)",
+                     0, 0, 0) != SQLITE_OK) {
         perror("[!] exec");
         return -1;
     }

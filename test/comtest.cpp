@@ -12,11 +12,12 @@
 
 using namespace std;
 
-void progressBar(long prog, long total) {
+void progressBar(const long &prog, const long &total) {
     int y, x;
     getyx(stdscr, y, x);
     const int len = 30;
     int percent = ceil(float(len) / total * prog);
+    // mvprintw(0, 0, "%ld %ld %d", prog, total, percent);
     wchar_t str[len + 1];
     for (int i = 0; i < percent; i++) str[i] = L'\u2588';
     for (int i = percent; i < len; i++) str[i] = L'\u2592';
@@ -39,9 +40,15 @@ void serverSock() {
     listen(servSock, 3);
     clsSock client(accept(servSock, (sockaddr *)&servAddr, &addrLen));
 
-    client.recvFile("/home/jomm/Documents/kurwa/client/test/aaa1");
-    client.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
-    client.recvFile("/home/jomm/Documents/kurwa/client/test/bbb1");
+    printw("aaa\n");
+    client.recvFile("/home/jomm/Documents/kurwa/client/test/aaa1",
+                    &progressBar);
+    printw("Asakusa.png\n");
+    client.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa1.png",
+                    &progressBar);
+    printw("bbb\n");
+    client.recvFile("/home/jomm/Documents/kurwa/client/test/bbb1",
+                    &progressBar);
 
     close(servSock);
 }
@@ -54,13 +61,9 @@ void clientSock() {
     servAddr.sin_port = htons(8080);
     connect(client.sock, (sockaddr *)&servAddr, sizeof(servAddr));
 
-    printw("aaa\n");
-    client.sendFile("/home/jomm/Documents/kurwa/client/test/aaa", progressBar);
-    printw("Asakusa.png\n");
-    client.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa.png",
-                    progressBar);
-    printw("abc\n");
-    client.sendFile("/home/jomm/Documents/kurwa/client/test/bbb", progressBar);
+    client.sendFile("/home/jomm/Documents/kurwa/client/test/aaa");
+    client.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa.png");
+    client.sendFile("/home/jomm/Documents/kurwa/client/test/bbb");
 
     close(client.sock);
 }

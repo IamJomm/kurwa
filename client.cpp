@@ -42,7 +42,7 @@ string drawUI(string title, vector<string> arr) {
     echo();
     return arr[choice];
 }
-void progressBar(long prog, long total) {
+void progressBar(const long &prog, const long &total) {
     int y, x;
     getyx(stdscr, y, x);
     const int len = 30;
@@ -177,7 +177,7 @@ class project {
         /*printw("Path to your project: ");
         getstr(buffer);
         prjPath = buffer;*/
-        prjPath = "/home/jomm/Documents/kurwa/client/test/";
+        prjPath = "/home/jomm/Documents/kurwa/client/test//";
         do {
             printw("Name of your project: ");
             getstr(buffer);
@@ -187,7 +187,6 @@ class project {
         clear();
     }
     void open() {
-        if (owner.sock.recv() == "not ok") set();
         char buffer[20];
         while (true) {
             printw("> ");
@@ -204,7 +203,20 @@ class project {
             }
         }
     }
-    void download() {}
+    void download() {
+        string command;
+        while ((command = owner.sock.recv()) != "done") {
+            string action = command.substr(0, command.find(' '));
+            string path = command.substr(command.find(' ') + 1);
+            if (action == "createDir") {
+                printw("Folder %s was created\n", path.c_str());
+                fs::create_directory(prjPath + path);
+            } else if (action == "createFile") {
+                printw("File %s was created\n", path.c_str());
+                owner.sock.recvFile(prjPath + path, progressBar);
+            }
+        }
+    }
 
     project(client &x) : owner(x) {}
 };
@@ -227,11 +239,11 @@ int main() {
     }
 
     if (drawUI("Choose one option:", {"Sign In", "Sign Up"})[5] == 'U') {
-        client.sock.send("sign up");
+        client.sock.send("signUp");
         client.reg();
         client.log();
     } else {
-        client.sock.send("sign in");
+        client.sock.send("signIn");
         client.log();
     }
     project project(client);
@@ -239,21 +251,22 @@ int main() {
                    {"Create new project", "Open existing project",
                     "Download project from server"})[0]) {
         case 'C':
-            client.sock.send("create prj");
+            client.sock.send("createPrj");
             project.set();
             project.open();
             break;
         case 'O':
-            client.sock.send("open prj");
+            client.sock.send("openPrj");
+            project.set();
             project.open();
             break;
         case 'D':
-            client.sock.send("download prj");
+            client.sock.send("downloadPrj");
+            project.set();
             project.download();
             project.open();
             break;
     }
-
     endwin();
     close(client.sock.sock);
 }
