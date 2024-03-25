@@ -90,6 +90,22 @@ class client {
 };
 
 class project {
+   private:
+    void downloadHelp(const string& path) {
+        for (const fs::directory_entry& entry : fs::directory_iterator(path)) {
+            string filePath = entry.path().string();
+            if (entry.is_directory()) {
+                owner.sock.send("createDir " +
+                                filePath.substr(prjPath.length()));
+                downloadHelp(filePath);
+            } else {
+                owner.sock.send("createFile " +
+                                filePath.substr(prjPath.length()));
+                owner.sock.sendFile(filePath);
+            }
+        }
+    }
+
    public:
     client owner;
     string prjPath;
@@ -167,18 +183,21 @@ class project {
                 sqlite3_finalize(stmt);
                 while ((command = owner.sock.recv())[0] != '{') {
                     string action = command.substr(0, command.find(' '));
-                    if (action == "createDir")
-                        fs::create_directory(
-                            prjPath + command.substr(command.find(' ') + 1));
-                    else if (action == "removeDir")
-                        fs::remove_all(prjPath +
-                                       command.substr(command.find(' ') + 1));
-                    else if (action == "createFile")
-                        owner.sock.recvFile(
-                            prjPath + command.substr(command.find(' ') + 1));
-                    else if (action == "removeFile")
-                        fs::remove(prjPath +
-                                   command.substr(command.find(' ') + 1));
+                    string path =
+                        prjPath + command.substr(command.find(' ') + 1);
+                    if (path.find("../") != string::npos)
+                        owner.sock.send("not ok");
+                    else {
+                        owner.sock.send("ok");
+                        if (action == "createDir")
+                            fs::create_directory(path);
+                        else if (action == "removeDir")
+                            fs::remove_all(path);
+                        else if (action == "createFile")
+                            owner.sock.recvFile(path);
+                        else if (action == "removeFile")
+                            fs::remove(path);
+                    }
                 }
                 sqlite3_prepare_v2(db,
                                    "update projects set dirTree=? where id=?;",
@@ -191,19 +210,9 @@ class project {
         }
     }
 
-    void download(const string& path) {
-        for (const fs::directory_entry& entry : fs::directory_iterator(path)) {
-            string filePath = entry.path().string();
-            if (entry.is_directory()) {
-                owner.sock.send("createDir " +
-                                filePath.substr(prjPath.length()));
-                download(filePath);
-            } else {
-                owner.sock.send("createFile " +
-                                filePath.substr(prjPath.length()));
-                owner.sock.sendFile(filePath);
-            }
-        }
+    void download() {
+        downloadHelp(prjPath);
+        owner.sock.send("done");
     }
 
     project(client& x, const string& y) : owner(x), prjPath(y) {}
@@ -227,8 +236,7 @@ void handleClient(client client, sqlite3* db, string path) {
         project.open(db);
     } else if (command == "downloadPrj") {
         project.set(db);
-        project.download(project.prjPath);
-        client.sock.send("done");
+        project.download();
         project.open(db);
     }
     close(client.sock.sock);
@@ -236,8 +244,7 @@ void handleClient(client client, sqlite3* db, string path) {
 }
 
 int main(int argc, char* argv[]) {
-    string path(argv[0]);
-    path = path.substr(0, path.rfind('/') + 1);
+    string path = fs::canonical(argv[0]).parent_path().string() + '/';
 
     sqlite3* db;
     if (sqlite3_open((path + "users.db").c_str(), &db) != SQLITE_OK) {

@@ -17,11 +17,10 @@ class clsSock {
         ::send(sock, msg.c_str(), msgSize, 0);
     }
     string recv() {
+        short msgSize;
+        ::recv(sock, (char*)&msgSize, sizeof(msgSize), 0);
         string res;
         char buffer[1024];
-        ::recv(sock, buffer, sizeof(short), 0);
-        short msgSize;
-        memcpy(&msgSize, buffer, sizeof(short));
         while (msgSize) {
             memset(buffer, 0, sizeof(buffer));
             msgSize -=
@@ -48,6 +47,7 @@ class clsSock {
             memset(buffer, 0, sizeof(buffer));
             if (callback) callback(fileSize - bytesLeft, fileSize);
         }
+        input.close();
     }
 
     void recvFile(const string& path,
@@ -59,12 +59,13 @@ class clsSock {
         long bytesLeft = fileSize;
         while (bytesLeft) {
             memset(buffer, 0, sizeof(buffer));
-            int bytesReceived =
-                ::recv(sock, buffer, min(bytesLeft, (long)sizeof(buffer)), 0);
-            output.write(buffer, bytesReceived);
-            bytesLeft -= bytesReceived;
+            int bytesToRecv = min(bytesLeft, (long)sizeof(buffer));
+            ::recv(sock, buffer, bytesToRecv, MSG_WAITALL);
+            output.write(buffer, bytesToRecv);
+            bytesLeft -= bytesToRecv;
             if (callback) callback(fileSize - bytesLeft, fileSize);
         }
+        output.close();
     }
 
     clsSock() : sock(socket(AF_INET, SOCK_STREAM, 0)) {}

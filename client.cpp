@@ -127,7 +127,9 @@ class project {
                         it.key().c_str());
                     owner.sock.send("removeDir " + path + it.key());
                     owner.sock.send("createFile " + path + it.key());
-                    owner.sock.sendFile(prjPath + path + it.key(), progressBar);
+                    if (owner.sock.recv() == "ok")
+                        owner.sock.sendFile(prjPath + path + it.key(),
+                                            &progressBar);
                 } else if (newjs[it.key()].is_object()) {
                     compJson(it.value(), newjs[it.key()],
                              path + it.key() + '/');
@@ -135,7 +137,9 @@ class project {
                     printw("File ./%s%s was changed.\n", path.c_str(),
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
-                    owner.sock.sendFile(prjPath + path + it.key(), progressBar);
+                    if (owner.sock.recv() == "ok")
+                        owner.sock.sendFile(prjPath + path + it.key(),
+                                            &progressBar);
                 }
             } else {
                 if (it.value().is_object() || it.value().is_null()) {
@@ -161,7 +165,9 @@ class project {
                     printw("File ./%s%s was created.\n", path.c_str(),
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
-                    owner.sock.sendFile(prjPath + path + it.key(), progressBar);
+                    if (owner.sock.recv() == "ok")
+                        owner.sock.sendFile(prjPath + path + it.key(),
+                                            &progressBar);
                 }
             }
         }
@@ -213,7 +219,7 @@ class project {
                 fs::create_directory(prjPath + path);
             } else if (action == "createFile") {
                 printw("File %s was created\n", path.c_str());
-                owner.sock.recvFile(prjPath + path, progressBar);
+                owner.sock.recvFile(prjPath + path, &progressBar);
             }
         }
     }
