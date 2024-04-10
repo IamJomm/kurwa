@@ -18,17 +18,16 @@
 using std::string, std::thread, std::cout, std::endl;
 namespace fs = std::filesystem;
 
-const char* genSha256Hash(string& input) {
-    unsigned char buffer[input.length()];
-    strcpy((char*)buffer, input.c_str());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256(buffer, strlen((char*)buffer), hash);
-    char* res = new char[SHA256_DIGEST_LENGTH];
-    memcpy(res, hash, SHA256_DIGEST_LENGTH);
-    return res;
-}
-
 class client {
+   private:
+    void genSha256Hash(string& input, char res[SHA256_DIGEST_LENGTH]) {
+        unsigned char buffer[input.length()];
+        strcpy((char*)buffer, input.c_str());
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        SHA256(buffer, strlen((char*)buffer), hash);
+        memcpy(res, hash, SHA256_DIGEST_LENGTH);
+    }
+
    public:
     clsSock sock;
     unsigned long id = 0;
@@ -51,15 +50,15 @@ class client {
             sqlite3_finalize(stmt);
         }
         sBuffer = sock.recv();
-        const char* password = genSha256Hash(sBuffer);
+        char hash[SHA256_DIGEST_LENGTH];
+        genSha256Hash(sBuffer, hash);
         sqlite3_prepare_v2(
             db, "insert into users (username, password) values (?, ?);", -1,
             &stmt, 0);
         sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_blob(stmt, 2, password, SHA256_DIGEST_LENGTH,
+        sqlite3_bind_blob(stmt, 2, hash, SHA256_DIGEST_LENGTH,
                           SQLITE_TRANSIENT);
         sqlite3_step(stmt);
-        delete[] password;
         sqlite3_finalize(stmt);
         cout << "[+] New user created." << endl;
     }
@@ -73,10 +72,10 @@ class client {
                 db, "select id from users where username = ? and password = ?;",
                 -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-            const char* hash = genSha256Hash(password);
+            char hash[SHA256_DIGEST_LENGTH];
+            genSha256Hash(password, hash);
             sqlite3_bind_blob(stmt, 2, hash, SHA256_DIGEST_LENGTH,
                               SQLITE_TRANSIENT);
-            delete[] hash;
             if (sqlite3_step(stmt) == SQLITE_ROW) {
                 id = sqlite3_column_int(stmt, 0);
                 sock.send("ok");
