@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <iostream>
 #include <thread>
 #include <vector>
 
@@ -16,27 +17,53 @@ class client {
        public:
         int sock;
         SSL *ssl;
+
+        void send(const string &msg) {
+            short msgSize = msg.size();
+            //::send(sock, &msgSize, sizeof(msgSize), 0);
+            SSL_write(ssl, &msgSize, sizeof(msgSize));
+            //::send(sock, msg.c_str(), msgSize, 0);
+            SSL_write(ssl, msg.c_str(), msgSize);
+        }
+        string recv() {
+            short msgSize;
+            //::recv(sock, (char *)&msgSize, sizeof(msgSize), 0);
+            SSL_read(ssl, (char *)&msgSize, sizeof(msgSize));
+            string res;
+            char buffer[1024];
+            while (msgSize) {
+                memset(buffer, 0, sizeof(buffer));
+                /* msgSize -= ::recv(sock, buffer,
+                                  min((short)sizeof(buffer), msgSize), 0); */
+                msgSize -=
+                    SSL_read(ssl, buffer, min((short)sizeof(buffer), msgSize));
+                res.append(buffer);
+            }
+            return res;
+        }
         void close() {
             SSL_shutdown(ssl);
             ::close(sock);
             SSL_free(ssl);
         }
+        clsSock(int sock, SSL *ssl) : sock(sock), ssl(ssl) {
+            SSL_set_fd(ssl, sock);
+            SSL_accept(ssl);
+        }
         clsSock(SSL *ssl) : sock(socket(AF_INET, SOCK_STREAM, 0)), ssl(ssl) {}
-        clsSock(int sock, SSL *ssl) : sock(sock), ssl(ssl) {}
     } sock;
 
     void testServer() {
-        char buffer[1024];
-        SSL_read(sock.ssl, buffer, sizeof(buffer));
-        printf("%s\n", buffer);
-        SSL_write(sock.ssl, buffer, strlen(buffer));
+        string msg = sock.recv();
+        cout << msg << endl;
+        sock.send(msg);
     }
     void testClient() {
-        const char *message = "Hello, Server!";
-        SSL_write(sock.ssl, message, strlen(message));
-        char buffer[1024];
-        SSL_read(sock.ssl, buffer, sizeof(buffer));
-        printf("%s\n", buffer);
+        string msg = "Hello, world!";
+        sock.send(msg);
+        msg = "";
+        msg = sock.recv();
+        cout << msg << endl;
     }
 
     client(SSL *ssl) : sock(ssl) {}
@@ -64,8 +91,7 @@ void serverSock() {
     listen(server_fd, 5);
     while (true) {
         client client(accept(server_fd, NULL, NULL), SSL_new(ctx));
-        SSL_set_fd(client.sock.ssl, client.sock.sock);
-        SSL_accept(client.sock.ssl);
+        thread(handleClient, client).detach();
     }
 
     SSL_CTX_free(ctx);
