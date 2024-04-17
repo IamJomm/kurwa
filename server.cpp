@@ -12,7 +12,6 @@
 #include <string>
 #include <thread>
 
-#include "encryption.hpp"
 #include "sr.hpp"
 
 using std::string, std::thread, std::cout, std::endl;

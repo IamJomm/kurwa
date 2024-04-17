@@ -16,9 +16,9 @@ using std::string, std::vector, nlohmann::json;
 namespace fs = std::filesystem;
 namespace ch = std::chrono;
 
-string drawUI(string title, vector<string> arr) {
+char drawUI(string title, vector<string> arr) {
     noecho();
-    int choice = 0, ch;
+    char choice = 0, ch;
     bool kurwa = true;
     while (kurwa) {
         printw("%s\n", title.c_str());
@@ -40,7 +40,7 @@ string drawUI(string title, vector<string> arr) {
         clear();
     }
     echo();
-    return arr[choice];
+    return choice;
 }
 void progressBar(const long &prog, const long &total) {
     int y, x;
@@ -244,29 +244,32 @@ int main() {
         return -1;
     }
 
-    if (drawUI("Choose one option:", {"Sign In", "Sign Up"})[5] == 'U') {
-        client.sock.send("signUp");
-        client.reg();
-        client.log();
-    } else {
-        client.sock.send("signIn");
-        client.log();
+    switch (drawUI("Choose one option:", {"Sign In", "Sign Up"})) {
+        case 0:
+            client.sock.send("signIn");
+            client.log();
+            break;
+        case 1:
+            client.sock.send("signUp");
+            client.reg();
+            client.log();
+            break;
     }
     project project(client);
     switch (drawUI("Choose one option:",
                    {"Create new project", "Open existing project",
-                    "Download project from server"})[0]) {
-        case 'C':
+                    "Download project from server"})) {
+        case 0:
             client.sock.send("createPrj");
             project.set();
             project.open();
             break;
-        case 'O':
+        case 1:
             client.sock.send("openPrj");
             project.set();
             project.open();
             break;
-        case 'D':
+        case 2:
             client.sock.send("downloadPrj");
             project.set();
             project.download();
