@@ -1,15 +1,35 @@
 #include <arpa/inet.h>
+#include <ncurses.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <fstream>
 #include <iostream>
 #include <thread>
 #include <vector>
 
 using namespace std;
+
+const int numClients = 1;
+
+void progressBar(const long &prog, const long &total) {
+    int y, x;
+    getyx(stdscr, y, x);
+    const int len = 30;
+    int percent = ceil(float(len) / total * prog);
+    wchar_t str[len + 1];
+    for (int i = 0; i < percent; i++) str[i] = L'\u2588';
+    for (int i = percent; i < len; i++) str[i] = L'\u2592';
+    str[len] = L'\0';
+    mvprintw(y, 0, "|%ls|", str);
+    if (prog == total) addch('\n');
+    refresh();
+}
 
 class client {
    public:
@@ -20,27 +40,61 @@ class client {
 
         void send(const string &msg) {
             short msgSize = msg.size();
-            //::send(sock, &msgSize, sizeof(msgSize), 0);
             SSL_write(ssl, &msgSize, sizeof(msgSize));
-            //::send(sock, msg.c_str(), msgSize, 0);
             SSL_write(ssl, msg.c_str(), msgSize);
         }
         string recv() {
             short msgSize;
-            //::recv(sock, (char *)&msgSize, sizeof(msgSize), 0);
             SSL_read(ssl, (char *)&msgSize, sizeof(msgSize));
             string res;
             char buffer[1024];
             while (msgSize) {
                 memset(buffer, 0, sizeof(buffer));
-                /* msgSize -= ::recv(sock, buffer,
-                                  min((short)sizeof(buffer), msgSize), 0); */
                 msgSize -=
                     SSL_read(ssl, buffer, min((short)sizeof(buffer), msgSize));
                 res.append(buffer);
             }
             return res;
         }
+
+        void sendFile(const string &path,
+                      void (*callback)(const long &, const long &) = nullptr) {
+            ifstream input(path);
+            input.seekg(0, ios::end);
+            long fileSize = input.tellg();
+            input.seekg(0, ios::beg);
+            SSL_write(ssl, &fileSize, sizeof(fileSize));
+            char buffer[1024];
+            long bytesLeft = fileSize;
+            while (bytesLeft) {
+                short bytesToSend = min(bytesLeft, (long)sizeof(buffer));
+                input.read(buffer, bytesToSend);
+                SSL_write(ssl, buffer, bytesToSend);
+                bytesLeft -= bytesToSend;
+                memset(buffer, 0, sizeof(buffer));
+                if (callback) callback(fileSize - bytesLeft, fileSize);
+            }
+            input.close();
+        }
+
+        void recvFile(const string &path,
+                      void (*callback)(const long &, const long &) = nullptr) {
+            ofstream output(path);
+            char buffer[1024];
+            long fileSize;
+            SSL_read(ssl, (char *)&fileSize, sizeof(fileSize));
+            long bytesLeft = fileSize;
+            while (bytesLeft) {
+                memset(buffer, 0, sizeof(buffer));
+                int bytesRecved =
+                    SSL_read(ssl, buffer, min(bytesLeft, (long)sizeof(buffer)));
+                output.write(buffer, bytesRecved);
+                bytesLeft -= bytesRecved;
+                if (callback) callback(fileSize - bytesLeft, fileSize);
+            }
+            output.close();
+        }
+
         void close() {
             SSL_shutdown(ssl);
             ::close(sock);
@@ -55,15 +109,21 @@ class client {
 
     void testServer() {
         string msg = sock.recv();
-        cout << msg << endl;
+        printw("%s\n", msg.c_str());
         sock.send(msg);
+        sock.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
+        sock.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
     }
     void testClient() {
         string msg = "Hello, world!";
         sock.send(msg);
         msg = "";
         msg = sock.recv();
-        cout << msg << endl;
+        printw("%s\n", msg.c_str());
+        sock.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa.png",
+                      progressBar);
+        sock.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa2.png",
+                      progressBar);
     }
 
     client(SSL *ssl) : sock(ssl) {}
@@ -89,7 +149,7 @@ void serverSock() {
     bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
 
     listen(server_fd, 5);
-    while (true) {
+    for (int i = 0; i < numClients; i++) {
         client client(accept(server_fd, NULL, NULL), SSL_new(ctx));
         thread(handleClient, client).detach();
     }
@@ -121,14 +181,20 @@ void clientSock() {
 }
 
 int main() {
+    setlocale(LC_ALL, "");
+    initscr();
+    scrollok(stdscr, TRUE);
+
     thread serverThread(serverSock);
     this_thread::sleep_for(chrono::seconds(1));
 
-    int numClients = 1;
     vector<thread> clientThreads;
     for (int i = 0; i < numClients; i++)
         clientThreads.push_back(thread(clientSock));
 
     serverThread.join();
-    for (auto &t : clientThreads) t.join();
+    for (thread &t : clientThreads) t.join();
+
+    getch();
+    endwin();
 }
