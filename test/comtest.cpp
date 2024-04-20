@@ -6,14 +6,17 @@
 
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <thread>
 #include <vector>
 
 using namespace std;
+namespace fs = std::filesystem;
 
 const int numClients = 1;
+string path;
 
 void progressBar(const long &prog, const long &total) {
     int y, x;
@@ -74,7 +77,6 @@ class client {
             }
             input.close();
         }
-
         void recvFile(const string &path,
                       void (*callback)(const long &, const long &) = nullptr) {
             ofstream output(path);
@@ -103,11 +105,11 @@ class client {
             SSL_accept(ssl);
         }
         clsSock(SSL *ssl) : sock(socket(AF_INET, SOCK_STREAM, 0)), ssl(ssl) {
-            sockaddr_in server_addr{};
-            server_addr.sin_family = AF_INET;
-            server_addr.sin_port = htons(8080);
-            inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
-            connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            sockaddr_in servAddr{};
+            servAddr.sin_family = AF_INET;
+            servAddr.sin_port = htons(8080);
+            inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr);
+            connect(sock, (struct sockaddr *)&servAddr, sizeof(servAddr));
             SSL_set_fd(ssl, sock);
             SSL_connect(ssl);
         }
@@ -144,31 +146,35 @@ void serverSock() {
     SSL_library_init();
     SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
 
-    SSL_CTX_use_certificate_file(ctx, "server.crt", SSL_FILETYPE_PEM);
-    SSL_CTX_use_PrivateKey_file(ctx, "server.key", SSL_FILETYPE_PEM);
+    SSL_CTX_use_certificate_file(ctx, (path + "cert.pem").c_str(),
+                                 SSL_FILETYPE_PEM);
+    SSL_CTX_use_PrivateKey_file(ctx, (path + "key.pem").c_str(),
+                                SSL_FILETYPE_PEM);
 
-    int serverSock = socket(AF_INET, SOCK_STREAM, 0);
-    sockaddr_in serverAddr{};
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(8080);
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+    int servSock = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in servAddr{};
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(8080);
+    servAddr.sin_addr.s_addr = INADDR_ANY;
+    socklen_t addrLen = sizeof(servAddr);
+    bind(servSock, (struct sockaddr *)&servAddr, sizeof(servAddr));
 
-    listen(serverSock, 5);
-    for (int i = 0; i < numClients; i++) {
-        client client(accept(serverSock, NULL, NULL), SSL_new(ctx));
-        thread(handleClient, client).detach();
-    }
+    listen(servSock, 5);
+    for (int i = 0; i < numClients; i++)
+        thread(handleClient,
+               client(accept(servSock, (sockaddr *)&servAddr, &addrLen),
+                      SSL_new(ctx)))
+            .detach();
 
     SSL_CTX_free(ctx);
-    close(serverSock);
+    close(servSock);
 }
 
 void clientSock() {
     SSL_library_init();
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
 
-    SSL_CTX_load_verify_locations(ctx, "server.crt", NULL);
+    SSL_CTX_load_verify_locations(ctx, (path + "cert.pem").c_str(), NULL);
 
     client client(SSL_new(ctx));
 
@@ -178,7 +184,9 @@ void clientSock() {
     SSL_CTX_free(ctx);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    path = fs::canonical(argv[0]).parent_path().string() + '/';
+
     setlocale(LC_ALL, "");
     initscr();
     scrollok(stdscr, TRUE);

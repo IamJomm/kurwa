@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <ncurses.h>
 #include <netinet/in.h>
+#include <openssl/ssl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -12,6 +13,7 @@
 #include <vector>
 
 #include "sr.hpp"
+
 using std::string, std::vector, nlohmann::json;
 namespace fs = std::filesystem;
 namespace ch = std::chrono;
@@ -86,6 +88,7 @@ class client {
             clear();
         } while (sock.recv() != "ok");
     }
+    client(SSL *ssl) : sock(ssl) {}
 };
 
 class project {
@@ -180,10 +183,12 @@ class project {
 
     void set() {
         char buffer[1024];
-        /*printw("Path to your project: ");
-        getstr(buffer);
-        prjPath = buffer;*/
-        prjPath = "/home/jomm/Documents/kurwa/client/test//";
+        do {
+            /*printw("Path to your project: ");
+            getstr(buffer);
+            prjPath = buffer;*/
+        } while (!fs::exists(prjPath) && !fs::is_directory(prjPath));
+        prjPath = "/home/jomm/Documents/kurwa/client/test/";
         do {
             printw("Name of your project: ");
             getstr(buffer);
@@ -227,22 +232,20 @@ class project {
     project(client &x) : owner(x) {}
 };
 
-int main() {
+int main(int argc, char *argv[]) {
+    string path = fs::canonical(argv[0]).parent_path().string() + '/';
+
     setlocale(LC_ALL, "");
     initscr();
     scrollok(stdscr, TRUE);
     keypad(stdscr, TRUE);
 
-    client client;
-    sockaddr_in servAddr;
-    servAddr.sin_family = AF_INET;
-    inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr.s_addr);
-    servAddr.sin_port = htons(8080);
-    if (connect(client.sock.sock, (sockaddr *)&servAddr, sizeof(servAddr)) ==
-        -1) {
-        perror("[!] connect");
-        return -1;
-    }
+    SSL_library_init();
+    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+
+    SSL_CTX_load_verify_locations(ctx, (path + "cert.pem").c_str(), NULL);
+
+    client client(SSL_new(ctx));
 
     switch (drawUI("Choose one option:", {"Sign In", "Sign Up"})) {
         case 0:
@@ -277,5 +280,7 @@ int main() {
             break;
     }
     endwin();
-    close(client.sock.sock);
+
+    SSL_CTX_free(ctx);
+    client.sock.close();
 }

@@ -1,5 +1,6 @@
 #include <netinet/in.h>
 #include <openssl/sha.h>
+#include <openssl/ssl.h>
 #include <sqlite3.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -84,7 +85,7 @@ class client {
         }
     }
 
-    client(int x) : sock(x) {}
+    client(int sock, SSL* ssl) : sock(sock, ssl) {}
 };
 
 class project {
@@ -237,7 +238,7 @@ void handleClient(client client, sqlite3* db, string path) {
         project.download();
         project.open(db);
     }
-    close(client.sock.sock);
+    client.sock.close();
     cout << "[-] Client disconnected." << endl;
 }
 
@@ -259,29 +260,33 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    int servSock = socket(AF_INET, SOCK_STREAM, 0), opt = 1;
-    if (servSock == -1) {
-        perror("[!] socket");
-        return -1;
-    }
-    setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt,
-               sizeof(opt));
-    sockaddr_in servAddr;
+    SSL_library_init();
+    SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
+
+    SSL_CTX_use_certificate_file(ctx, (path + "cert.pem").c_str(),
+                                 SSL_FILETYPE_PEM);
+    SSL_CTX_use_PrivateKey_file(ctx, (path + "key.pem").c_str(),
+                                SSL_FILETYPE_PEM);
+
+    int servSock = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in servAddr{};
     servAddr.sin_family = AF_INET;
-    servAddr.sin_addr.s_addr = INADDR_ANY;
     servAddr.sin_port = htons(8080);
+    servAddr.sin_addr.s_addr = INADDR_ANY;
     socklen_t addrLen = sizeof(servAddr);
-    if (bind(servSock, (sockaddr*)&servAddr, sizeof(servAddr)) == -1) {
-        perror("[!] bind");
-        return -1;
-    }
+    bind(servSock, (struct sockaddr*)&servAddr, sizeof(servAddr));
+
     listen(servSock, 5);
     cout << "[!] Everything is ok :)" << endl;
     while (true)
         thread(handleClient,
-               client(accept(servSock, (sockaddr*)&servAddr, &addrLen)), db,
-               path)
+               client(accept(servSock, (sockaddr*)&servAddr, &addrLen),
+                      SSL_new(ctx)),
+               db, path)
             .detach();
+
+    SSL_CTX_free(ctx);
     close(servSock);
+
     sqlite3_close(db);
 }
