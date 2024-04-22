@@ -1,6 +1,8 @@
+#include <openssl/sha.h>
 #include <sqlite3.h>
 #include <stdarg.h>
 
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <unordered_map>
@@ -8,10 +10,18 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+void genSha256Hash(const string &input, char res[SHA256_DIGEST_LENGTH]) {
+    unsigned char buffer[input.length()];
+    strcpy((char *)buffer, input.c_str());
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(buffer, strlen((char *)buffer), hash);
+    memcpy(res, hash, SHA256_DIGEST_LENGTH);
+}
+
 class clsDb {
    private:
     sqlite3 *db;
-    unordered_map<string, unordered_map<string, char>> dbMap;
+    unordered_map<string, unordered_map<string, short>> dbMap;
 
     void setDbMap() {
         sqlite3_stmt *stmt;
@@ -25,7 +35,7 @@ class clsDb {
                                -1, &stmt2, 0);
             while (sqlite3_step(stmt2) == SQLITE_ROW) {
                 string sType = (const char *)sqlite3_column_text(stmt2, 2);
-                char iType;
+                short iType;
                 if (sType == "TEXT")
                     iType = 1;
                 else if (sType == "INTEGER")
@@ -63,32 +73,34 @@ class clsDb {
         sqlite3_prepare_v2(db, command.c_str(), -1, &stmt, 0);
 
         short left = 0, right;
+        short column = 1;
         do {
-            string column;
+            string columnName;
             right = columns.find(',', left);
             if (right != string::npos)
-                column = columns.substr(left, right - left);
+                columnName = columns.substr(left, right - left);
             else
-                column = columns.substr(left);
-            switch (dbMap[table][column]) {
+                columnName = columns.substr(left);
+            switch (dbMap[table][columnName]) {
                 case 1:
-                    sqlite3_bind_text(stmt, 1, va_arg(args, const char *), -1,
-                                      SQLITE_STATIC);
+                    sqlite3_bind_text(stmt, column, va_arg(args, const char *),
+                                      -1, SQLITE_STATIC);
                     break;
                 case 2:
-                    sqlite3_bind_int(stmt, 2, va_arg(args, unsigned long));
+                    sqlite3_bind_int(stmt, column, va_arg(args, unsigned long));
                     break;
                 case 3:
                     int size = va_arg(args, int);
-                    sqlite3_bind_blob(stmt, 2, va_arg(args, char[size]), size,
+                    sqlite3_bind_blob(stmt, 2, va_arg(args, char *), size,
                                       SQLITE_TRANSIENT);
                     break;
             }
             left = right + 2;
+            column++;
         } while (right != string::npos);
+        sqlite3_step(stmt);
 
         sqlite3_finalize(stmt);
-
         va_end(args);
     }
     clsDb(const string &path, const string &command) {
@@ -106,5 +118,8 @@ int main(int argc, char *argv[]) {
         "create table if not exists users (id integer primary key, username "
         "text, password blob); create table if not exists projects (id integer "
         "primary key, ownerId integer, prjName text, dir text, dirTree text)");
-    db.insert("table", "username, password", "kurwa", "aboba");
+
+    char hash[SHA256_DIGEST_LENGTH];
+    genSha256Hash("kurwa", hash);
+    db.insert("users", "username, password", "kurwa", sizeof(hash), hash);
 }
