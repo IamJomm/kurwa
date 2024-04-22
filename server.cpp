@@ -109,7 +109,7 @@ class project {
    public:
     client owner;
     string prjPath;
-    unsigned int prjId = 0;
+    unsigned long prjId = 0;
 
     void create(sqlite3* db) {
         sqlite3_stmt* stmt;
@@ -253,10 +253,10 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     if (sqlite3_exec(db,
-                     "create table if not exists users(id integer primary key, "
-                     "username text, password blob); create table if not "
-                     "exists projects(id integer primary key, ownerId integer, "
-                     "prjName text, dir text, dirTree text)",
+                     "create table if not exists users (id integer primary "
+                     "key, username text, password blob); create table if not "
+                     "exists projects (id integer primary key, ownerId "
+                     "integer, prjName text, dir text, dirTree text)",
                      0, 0, 0) != SQLITE_OK) {
         perror("[!] exec");
         return -1;
