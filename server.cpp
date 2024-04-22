@@ -1,6 +1,7 @@
 #include <netinet/in.h>
 #include <openssl/sha.h>
 #include <openssl/ssl.h>
+#include <signal.h>
 #include <sqlite3.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -243,6 +244,7 @@ void handleClient(client client, sqlite3* db, string path) {
 }
 
 int main(int argc, char* argv[]) {
+    signal(SIGPIPE, SIG_IGN);
     string path = fs::canonical(argv[0]).parent_path().string() + '/';
 
     sqlite3* db;

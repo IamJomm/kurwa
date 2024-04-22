@@ -15,7 +15,7 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-const int numClients = 1;
+const unsigned short numClients = 1;
 string path;
 
 void progressBar(const long &prog, const long &total) {
@@ -119,8 +119,12 @@ class client {
         string msg = sock.recv();
         printw("%s\n", msg.c_str());
         sock.send(msg);
-        sock.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
-        sock.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
+        if (numClients == 1) {
+            sock.recvFile(
+                "/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
+            sock.sendFile(
+                "/home/jomm/Documents/kurwa/client/test/Asakusa1.png");
+        }
     }
     void testClient() {
         string msg = "Hello, world!";
@@ -128,10 +132,12 @@ class client {
         msg = "";
         msg = sock.recv();
         printw("%s\n", msg.c_str());
-        sock.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa.png",
-                      progressBar);
-        sock.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa2.png",
-                      progressBar);
+        if (numClients == 1) {
+            sock.sendFile("/home/jomm/Documents/kurwa/client/test/Asakusa.png",
+                          progressBar);
+            sock.recvFile("/home/jomm/Documents/kurwa/client/test/Asakusa2.png",
+                          progressBar);
+        }
     }
 
     client(SSL *ssl) : sock(ssl) {}

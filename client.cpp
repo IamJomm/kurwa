@@ -184,11 +184,11 @@ class project {
     void set() {
         char buffer[1024];
         do {
-            /*printw("Path to your project: ");
+            printw("Path to your project: ");
             getstr(buffer);
-            prjPath = buffer;*/
+            prjPath = buffer;
         } while (!fs::exists(prjPath) && !fs::is_directory(prjPath));
-        prjPath = "/home/jomm/Documents/kurwa/client/test/";
+        //  prjPath = "/home/jomm/Documents/kurwa/client/test/";
         do {
             printw("Name of your project: ");
             getstr(buffer);
