@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <unordered_map>
+#include <vector>
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -21,7 +22,8 @@ void genSha256Hash(const string &input, char res[SHA256_DIGEST_LENGTH]) {
 class clsDb {
    private:
     sqlite3 *db;
-    unordered_map<string, unordered_map<string, short>> dbMap;
+    enum columnType { TEXT = 1, INTEGER, BLOB };
+    unordered_map<string, unordered_map<string, columnType>> dbMap;
 
     void setDbMap() {
         sqlite3_stmt *stmt;
@@ -35,13 +37,13 @@ class clsDb {
                                -1, &stmt2, 0);
             while (sqlite3_step(stmt2) == SQLITE_ROW) {
                 string sType = (const char *)sqlite3_column_text(stmt2, 2);
-                short iType;
+                columnType iType;
                 if (sType == "TEXT")
-                    iType = 1;
+                    iType = TEXT;
                 else if (sType == "INTEGER")
-                    iType = 2;
+                    iType = INTEGER;
                 else if (sType == "BLOB")
-                    iType = 3;
+                    iType = BLOB;
 
                 dbMap[table][(const char *)sqlite3_column_text(stmt2, 1)] =
                     iType;
@@ -51,58 +53,119 @@ class clsDb {
         sqlite3_finalize(stmt);
     }
 
-    void countChar(const string &str, char ch, short &n) {
-        n = 0;
-        for (short i = 0; i < str.length(); i++)
-            if (str[i] == ',') n++;
-    }
-
    public:
-    void insert(const string &table, const string &columns, ...) {
+    void insert(const string &table, const vector<string> &columns, ...) {
         va_list args;
         va_start(args, columns);
-        short n;
-        countChar(columns, ',', n);
 
-        string command = "insert into users (" + columns + ") values (";
-        for (int i = 0; i < n; i++) command += "?, ";
+        string command = "insert into users (" + columns[0];
+        int n = columns.size();
+        for (int i = 1; i < n; i++) command += ',' + columns[i];
+        command += ") values (";
+        for (int i = 0; i < n - 1; i++) command += "?,";
         command += "?);";
-        cout << command << endl;
 
         sqlite3_stmt *stmt;
         sqlite3_prepare_v2(db, command.c_str(), -1, &stmt, 0);
 
-        short left = 0, right;
-        short column = 1;
-        do {
-            string columnName;
-            right = columns.find(',', left);
-            if (right != string::npos)
-                columnName = columns.substr(left, right - left);
-            else
-                columnName = columns.substr(left);
-            switch (dbMap[table][columnName]) {
-                case 1:
-                    sqlite3_bind_text(stmt, column, va_arg(args, const char *),
+        for (int i = 0; i < n; i++) {
+            switch (dbMap[table][columns[i]]) {
+                case TEXT:
+                    sqlite3_bind_text(stmt, i + 1, va_arg(args, const char *),
                                       -1, SQLITE_STATIC);
                     break;
-                case 2:
-                    sqlite3_bind_int(stmt, column, va_arg(args, unsigned long));
+                case INTEGER:
+                    sqlite3_bind_int(stmt, i + 1, va_arg(args, unsigned long));
                     break;
-                case 3:
+                case BLOB:
                     int size = va_arg(args, int);
-                    sqlite3_bind_blob(stmt, 2, va_arg(args, char *), size,
-                                      SQLITE_TRANSIENT);
+                    sqlite3_bind_blob(stmt, i + 1, va_arg(args, const char *),
+                                      size, SQLITE_TRANSIENT);
                     break;
             }
-            left = right + 2;
-            column++;
-        } while (right != string::npos);
+        }
+
         sqlite3_step(stmt);
 
         sqlite3_finalize(stmt);
         va_end(args);
     }
+    void select(const string &table, const vector<string> &columns,
+                const string &condition, ...) {
+        va_list args;
+        va_start(args, condition);
+
+        string command = "select " + columns[0];
+        int n = columns.size();
+        for (int i = 1; i < n; i++) command += ',' + columns[i];
+        command += " from " + table;
+
+        if (!condition.empty())
+            command += " where " + condition + ';';
+        else
+            command += ';';
+        cout << command << endl;
+
+        sqlite3_stmt *stmt;
+        sqlite3_prepare_v2(db, command.c_str(), -1, &stmt, 0);
+
+        if (!condition.empty()) {
+            short left = 0, right;
+            short column = 1;
+            while ((right = condition.find('=', left)) != string::npos) {
+                if ((left = condition.rfind(' ', right - 2)) == string::npos)
+                    left = 0;
+                else
+                    left++;
+                switch (
+                    dbMap[table][condition.substr(left, right - left - 1)]) {
+                    case TEXT:
+                        sqlite3_bind_text(stmt, column,
+                                          va_arg(args, const char *), -1,
+                                          SQLITE_STATIC);
+                        break;
+                    case INTEGER:
+                        sqlite3_bind_int(stmt, column,
+                                         va_arg(args, unsigned long));
+                        break;
+                    case BLOB:
+                        int size = va_arg(args, int);
+                        sqlite3_bind_blob(stmt, column,
+                                          va_arg(args, const char *), size,
+                                          SQLITE_TRANSIENT);
+                        break;
+                }
+                left = right + 1;
+                column++;
+            }
+        }
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            for (int i = 0; i < n; i++) {
+                switch (dbMap[table][columns[i]]) {
+                    case TEXT: {
+                        string *ptr = va_arg(args, string *);
+                        *ptr = (const char *)sqlite3_column_text(stmt, i);
+                        break;
+                    }
+                    case INTEGER: {
+                        unsigned long *ptr = va_arg(args, unsigned long *);
+                        *ptr = sqlite3_column_int(stmt, i);
+                        break;
+                    }
+                    case BLOB: {
+                        int size = va_arg(args, int);
+                        char *ptr = va_arg(args, char *);
+                        memcpy(ptr, sqlite3_column_blob(stmt, i), size);
+                        break;
+                    }
+                }
+            }
+        }
+
+        sqlite3_finalize(stmt);
+        va_end(args);
+    }
+
     clsDb(const string &path, const string &command) {
         sqlite3_open(path.c_str(), &db);
         sqlite3_exec(db, command.c_str(), 0, 0, 0);
@@ -121,5 +184,14 @@ int main(int argc, char *argv[]) {
 
     char hash[SHA256_DIGEST_LENGTH];
     genSha256Hash("kurwa", hash);
-    db.insert("users", "username, password", "kurwa", sizeof(hash), hash);
+    // db.insert("users", {"username", "password"}, "bober", sizeof(hash),
+    // hash);
+    string username;
+    char password[SHA256_DIGEST_LENGTH];
+    db.select("users", {"username", "password"}, "id = ? ", 1, &username,
+              sizeof(password), &password);
+    cout << username << '|' << password << endl;
 }
+// insert into users (username, password) values (?, ?);
+// update projects set dirTree = ? where id = ?;
+// select id, dir from projects where ownerId = ? and prjName = ?;
