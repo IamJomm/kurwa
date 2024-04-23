@@ -99,12 +99,8 @@ class clsDb {
         int n = columns.size();
         for (int i = 1; i < n; i++) command += ',' + columns[i];
         command += " from " + table;
-
-        if (!condition.empty())
-            command += " where " + condition + ';';
-        else
-            command += ';';
-        cout << command << endl;
+        if (!condition.empty()) command += " where " + condition;
+        command += ';';
 
         sqlite3_stmt *stmt;
         sqlite3_prepare_v2(db, command.c_str(), -1, &stmt, 0);
@@ -186,11 +182,13 @@ int main(int argc, char *argv[]) {
     genSha256Hash("kurwa", hash);
     // db.insert("users", {"username", "password"}, "bober", sizeof(hash),
     // hash);
+    unsigned long id = 0;
     string username;
     char password[SHA256_DIGEST_LENGTH];
-    db.select("users", {"username", "password"}, "id = ? ", 1, &username,
-              sizeof(password), &password);
-    cout << username << '|' << password << endl;
+    string con = "kurwa";
+    db.select("users", {"id", "username", "password"}, "username = ?",
+              con.c_str(), &id, &username, sizeof(password), &password);
+    cout << id << '|' << username << '|' << password << endl;
 }
 // insert into users (username, password) values (?, ?);
 // update projects set dirTree = ? where id = ?;
