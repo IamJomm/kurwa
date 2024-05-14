@@ -3,6 +3,7 @@
 #include <stdarg.h>
 
 #include <cctype>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -10,12 +11,11 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-void genSha256Hash(const string &input, char res[SHA256_DIGEST_LENGTH]) {
+void genSha256Hash(string input, unsigned char hash[SHA256_DIGEST_LENGTH + 1]) {
     unsigned char buffer[input.length()];
     strcpy((char *)buffer, input.c_str());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(buffer, strlen((char *)buffer), hash);
-    memcpy(res, hash, SHA256_DIGEST_LENGTH);
+    hash[SHA256_DIGEST_LENGTH] = '\0';
 }
 
 class clsDb {
@@ -41,9 +41,12 @@ class clsDb {
                 case 'i':
                     sqlite3_bind_int(stmt, i, va_arg(args, unsigned long));
                     break;
-                case 'h':
-                    sqlite3_bind_blob(stmt, i, va_arg(args, const char *),
-                                      SHA256_DIGEST_LENGTH, SQLITE_TRANSIENT);
+                case 'b':
+                    const unsigned char *blob =
+                        va_arg(args, const unsigned char *);
+                    size_t blobSize = va_arg(args, size_t);
+                    sqlite3_bind_blob(stmt, i, blob, blobSize - 1,
+                                      SQLITE_TRANSIENT);
                     break;
             }
         }
@@ -60,10 +63,12 @@ class clsDb {
                         *ptr = sqlite3_column_int(stmt, i);
                         break;
                     }
-                    case 'h': {
-                        char *ptr = va_arg(args, char *);
-                        memcpy(ptr, sqlite3_column_blob(stmt, i),
-                               SHA256_DIGEST_LENGTH);
+                    case 'b': {
+                        unsigned char *blob = va_arg(args, unsigned char *);
+                        size_t blobSize = va_arg(args, size_t);
+                        memcpy(blob, sqlite3_column_blob(stmt, i),
+                               blobSize - 1);
+                        blob[blobSize - 1] = '\0';
                         break;
                     }
                 }
@@ -89,11 +94,14 @@ int main(int argc, char *argv[]) {
         "text, password blob); create table if not exists projects (id integer "
         "primary key, ownerId integer, prjName text, dir text, dirTree text)");
 
+    unsigned char hash[SHA256_DIGEST_LENGTH + 1];
+    genSha256Hash("kurwa", hash);
+
     unsigned long id = 0;
     string username;
-    char password[SHA256_DIGEST_LENGTH];
-    db.exec("select id, username, password from users where username = ?",
-            "ishs", "bober", &id, &username, &password);
+    unsigned char password[SHA256_DIGEST_LENGTH + 1];
+    db.exec("select * from users where password = ?;", "isbb", hash,
+            sizeof(hash), &id, &username, password, sizeof(password));
     cout << id << '|' << username << '|' << password << endl;
 }
 // insert into users (username, password) values (?, ?);
