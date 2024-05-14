@@ -21,12 +21,12 @@ namespace fs = std::filesystem;
 
 class client {
    private:
-    void genSha256Hash(string& input, char res[SHA256_DIGEST_LENGTH]) {
+    void genSha256Hash(const string& input,
+                       unsigned char hash[SHA256_DIGEST_LENGTH + 1]) {
         unsigned char buffer[input.length()];
         strcpy((char*)buffer, input.c_str());
-        unsigned char hash[SHA256_DIGEST_LENGTH];
         SHA256(buffer, strlen((char*)buffer), hash);
-        memcpy(res, hash, SHA256_DIGEST_LENGTH);
+        hash[SHA256_DIGEST_LENGTH] = '\0';
     }
 
    public:
@@ -51,7 +51,7 @@ class client {
             sqlite3_finalize(stmt);
         }
         sBuffer = sock.recv();
-        char hash[SHA256_DIGEST_LENGTH];
+        unsigned char hash[SHA256_DIGEST_LENGTH + 1];
         genSha256Hash(sBuffer, hash);
         sqlite3_prepare_v2(
             db, "insert into users (username, password) values (?, ?);", -1,
@@ -73,7 +73,7 @@ class client {
                 db, "select id from users where username = ? and password = ?;",
                 -1, &stmt, 0);
             sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-            char hash[SHA256_DIGEST_LENGTH];
+            unsigned char hash[SHA256_DIGEST_LENGTH + 1];
             genSha256Hash(password, hash);
             sqlite3_bind_blob(stmt, 2, hash, SHA256_DIGEST_LENGTH,
                               SQLITE_TRANSIENT);

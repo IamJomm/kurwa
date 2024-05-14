@@ -100,8 +100,9 @@ int main(int argc, char *argv[]) {
     unsigned long id = 0;
     string username;
     unsigned char password[SHA256_DIGEST_LENGTH + 1];
-    db.exec("select * from users where password = ?;", "isbb", hash,
-            sizeof(hash), &id, &username, password, sizeof(password));
+    db.exec("select * from users where password = ? and username = ?;", "isbbs",
+            hash, sizeof(hash), "bober", &id, &username, password,
+            sizeof(password));
     cout << id << '|' << username << '|' << password << endl;
 }
 // insert into users (username, password) values (?, ?);
