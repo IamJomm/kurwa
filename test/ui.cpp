@@ -11,7 +11,7 @@
 using namespace std;
 namespace ch = std::chrono;
 
-class ui {
+class clsUi {
    public:
     short maxx, maxy;
 
@@ -117,7 +117,7 @@ class ui {
         curs_set(true);
     }
 
-    ui() {
+    clsUi() {
         setlocale(LC_ALL, "");
         initscr();
         cbreak();
@@ -125,11 +125,11 @@ class ui {
         keypad(stdscr, true);
         getmaxyx(stdscr, maxy, maxx);
     }
-    ~ui() { endwin(); }
+    ~clsUi() { endwin(); }
 };
 
 int main() {
-    ui ui;
+    clsUi ui;
     ui.menu("KURWA:", {"Boobies", "SEEEX", "DICK"});
     int n = 29;
     for (int i = 0; i < 25; i++) {

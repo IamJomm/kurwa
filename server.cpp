@@ -24,16 +24,16 @@
 using std::string, std::thread, std::ref, std::cout, std::endl;
 namespace fs = std::filesystem;
 
-class clsDb {
+class db {
    private:
-    sqlite3* db;
+    sqlite3* database;
 
    public:
     bool exec(const string& query, const string& types, ...) {
         va_list args;
         va_start(args, types);
         sqlite3_stmt* stmt;
-        sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
+        sqlite3_prepare_v2(database, query.c_str(), -1, &stmt, 0);
 
         short toBind = 0;
         for (char ch : query)
@@ -87,11 +87,11 @@ class clsDb {
         return found;
     }
 
-    clsDb(const string& path, const string& command) {
-        sqlite3_open(path.c_str(), &db);
-        sqlite3_exec(db, command.c_str(), 0, 0, 0);
+    db(const string& path, const string& command) {
+        sqlite3_open(path.c_str(), &database);
+        sqlite3_exec(database, command.c_str(), 0, 0, 0);
     }
-    ~clsDb() { sqlite3_close(db); }
+    ~db() { sqlite3_close(database); }
 };
 
 class client {
@@ -108,7 +108,7 @@ class client {
     clsSock sock;
     unsigned long id = 0;
 
-    void reg(clsDb& db) {
+    void reg(db& db) {
         string sBuffer;
         string username;
         while (username.empty()) {
@@ -128,7 +128,7 @@ class client {
         cout << "[+] New user created." << endl;
     }
 
-    void log(clsDb& db) {
+    void log(db& db) {
         while (!id) {
             string username = sock.recv();
             string password = sock.recv();
@@ -168,7 +168,7 @@ class project {
     string prjPath;
     unsigned long prjId = 0;
 
-    void create(clsDb& db) {
+    void create(db& db) {
         while (!prjId) {
             string prjName = owner.sock.recv();
             if (!db.exec("select id from projects where ownerId = ? and "
@@ -179,6 +179,7 @@ class project {
                 char uuidStr[37];
                 uuid_unparse(uuid, uuidStr);
                 prjPath = prjPath + uuidStr + '/';
+                cout << prjPath << endl;
                 fs::create_directory(prjPath);
                 db.exec(
                     "insert into projects (ownerId, prjName, dir, dirTree) "
@@ -194,7 +195,7 @@ class project {
         }
     }
 
-    void set(clsDb& db) {
+    void set(db& db) {
         while (!prjId) {
             string uuid;
             if (db.exec("select id, dir from projects where ownerId = ? "
@@ -202,19 +203,21 @@ class project {
                         "isis", owner.id, owner.sock.recv().c_str(), &prjId,
                         &uuid)) {
                 prjPath = prjPath + uuid + '/';
+                cout << prjPath << endl;
                 owner.sock.send("ok");
             } else
                 owner.sock.send("not ok");
         }
     }
 
-    void open(clsDb& db) {
+    void open(db& db) {
         string command;
         while ((command = owner.sock.recv()) != "quit") {
             if (command == "push") {
                 string dirTree;
                 db.exec("select dirTree from projects where id = ?;", "si",
                         prjId, &dirTree);
+                cout << dirTree << endl;
                 owner.sock.send(dirTree);
                 while ((command = owner.sock.recv())[0] != '{') {
                     string action = command.substr(0, command.find(' '));
@@ -248,7 +251,7 @@ class project {
     project(client& x, const string& y) : owner(x), prjPath(y) {}
 };
 
-void handleClient(client client, clsDb& db, const string& path) {
+void handleClient(client client, db& db, const string& path) {
     cout << "[+] Kurwa client connected." << endl;
     string command = client.sock.recv();
     if (command == "signUp") {
@@ -277,7 +280,7 @@ int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
     const string path = fs::canonical(argv[0]).parent_path().string() + '/';
 
-    clsDb db(
+    db db(
         path + "users.db",
         "create table if not exists users (id integer primary key, username "
         "text, password blob); create table if not exists projects (id integer "
@@ -300,11 +303,12 @@ int main(int argc, char* argv[]) {
 
     listen(servSock, 5);
     cout << "[!] Everything is ok :)" << endl;
-    while (true) {
-        client newClient(accept(servSock, (sockaddr*)&servAddr, &addrLen),
-                         SSL_new(ctx));
-        thread(handleClient, newClient, ref(db), path).detach();
-    }
+    while (true)
+        thread(handleClient,
+               client(accept(servSock, (sockaddr*)&servAddr, &addrLen),
+                      SSL_new(ctx)),
+               ref(db), path)
+            .detach();
 
     SSL_CTX_free(ctx);
     close(servSock);
