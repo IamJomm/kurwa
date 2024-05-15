@@ -13,6 +13,8 @@ namespace ch = std::chrono;
 
 class ui {
    public:
+    short maxx, maxy;
+
     short menu(const string& title, const vector<string>& choices) {
         noecho();
         curs_set(false);
@@ -25,11 +27,9 @@ class ui {
         short titleLen = title.length();
         if (titleLen > maxWidth) maxWidth = titleLen;
         if (minWidth > maxWidth) maxWidth = minWidth;
-        short y, x;
-        getmaxyx(stdscr, y, x);
         WINDOW* win =
-            newwin(maxHeight + 2, maxWidth + 2, y / 2 - (maxHeight + 2) / 2,
-                   x / 2 - (maxWidth + 2) / 2);
+            newwin(maxHeight + 2, maxWidth + 2, maxy / 2 - (maxHeight + 2) / 2,
+                   maxx / 2 - (maxWidth + 2) / 2);
         keypad(win, true);
         box(win, 0, 0);
         mvwprintw(win, 0, 1, "%s", title.c_str());
@@ -90,17 +90,17 @@ class ui {
     void notification(const string& title, const vector<string>& message) {
         noecho();
         curs_set(false);
-        short maxWidth = 0, maxHeight = message.size(), y, x;
+        short maxWidth = 0, maxHeight = message.size(),
+              titleLen = title.length();
         for (const string& str : message) {
             short len = str.length();
             if (len > maxWidth) maxWidth = len;
         }
-        short titleLen = title.length();
         if (titleLen > maxWidth) maxWidth = titleLen;
         maxWidth += 4;
-        getmaxyx(stdscr, y, x);
-        WINDOW* win = newwin(maxHeight + 2, maxWidth,
-                             y / 2 - (maxHeight + 2) / 2, x / 2 - maxWidth / 2);
+        WINDOW* win =
+            newwin(maxHeight + 2, maxWidth, maxy / 2 - (maxHeight + 2) / 2,
+                   maxx / 2 - maxWidth / 2);
         box(win, 0, 0);
         mvwprintw(win, 0, maxWidth / 2 - titleLen / 2, "%s", title.c_str());
         for (short i = 0; i < maxHeight; i++)
@@ -123,6 +123,7 @@ class ui {
         cbreak();
         scrollok(stdscr, true);
         keypad(stdscr, true);
+        getmaxyx(stdscr, maxy, maxx);
     }
     ~ui() { endwin(); }
 };

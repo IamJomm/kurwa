@@ -20,7 +20,7 @@ namespace ch = std::chrono;
 
 char drawUI(string title, vector<string> arr) {
     noecho();
-    char choice = 0, ch;
+    short choice = 0, ch;
     bool kurwa = true;
     while (kurwa) {
         printw("%s\n", title.c_str());

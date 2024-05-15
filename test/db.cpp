@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -23,12 +24,11 @@ class clsDb {
     sqlite3 *db;
 
    public:
-    void exec(const string &query, const string &types, ...) {
+    bool exec(const string &query, const string &types, ...) {
         va_list args;
         va_start(args, types);
         sqlite3_stmt *stmt;
         sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
-
         short toBind = 0;
         for (char ch : query)
             if (ch == '?') ++toBind;
@@ -50,6 +50,7 @@ class clsDb {
                     break;
             }
         }
+        bool found = false;
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             for (short i = 0; i < types.length() - toBind; i++) {
                 switch (types[i]) {
@@ -73,20 +74,22 @@ class clsDb {
                     }
                 }
             }
+            found = true;
         }
-
         sqlite3_finalize(stmt);
         va_end(args);
+        return found;
     }
 
     clsDb(const string &path, const string &command) {
         sqlite3_open(path.c_str(), &db);
         sqlite3_exec(db, command.c_str(), 0, 0, 0);
     }
+    ~clsDb() { sqlite3_close(db); }
 };
 
 int main(int argc, char *argv[]) {
-    string path = fs::canonical(argv[0]).parent_path().string() + '/';
+    const string path = fs::canonical(argv[0]).parent_path().string() + '/';
 
     clsDb db(
         path + "test.db",  //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -100,10 +103,9 @@ int main(int argc, char *argv[]) {
     unsigned long id = 0;
     string username;
     unsigned char password[SHA256_DIGEST_LENGTH + 1];
-    db.exec("select * from users where password = ? and username = ?;", "isbbs",
-            hash, sizeof(hash), "bober", &id, &username, password,
-            sizeof(password));
-    cout << id << '|' << username << '|' << password << endl;
+    cout << db.exec("insert into users (username, password) values (?, ?);",
+                    "sb", "kurwa", hash, sizeof(hash))
+         << ' ' << id << '|' << username << '|' << password << endl;
 }
 // insert into users (username, password) values (?, ?);
 // update projects set dirTree = ? where id = ?;
