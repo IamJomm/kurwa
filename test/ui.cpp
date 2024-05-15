@@ -13,23 +13,26 @@ namespace ch = std::chrono;
 
 class ui {
    public:
-    WINDOW* win = nullptr;
-
     short menu(const string& title, const vector<string>& choices) {
         noecho();
         curs_set(false);
-
-        short choice = 0, input = 0, maxLen = 0;
-
-        mvwprintw(win, 0, 0, "%s", title.c_str());
-        for (int i = 1; i < choices.size(); i++) {
-            short len = choices[i].length();
-            if (len > maxLen) maxLen = len;
+        short choice = 0, input = 0, maxWidth = 0, maxHeight = choices.size(),
+              minWidth = 15;
+        for (const string& str : choices) {
+            short len = str.length();
+            if (len > maxWidth) maxWidth = len;
         }
-        wattron(win, A_STANDOUT);
-        mvwprintw(win, 1, 1, "%s%*c", choices[0].c_str(),
-                  maxLen - choices[0].length() + 1, '\0');
-        wattroff(win, A_STANDOUT);
+        short titleLen = title.length();
+        if (titleLen > maxWidth) maxWidth = titleLen;
+        if (minWidth > maxWidth) maxWidth = minWidth;
+        short y, x;
+        getmaxyx(stdscr, y, x);
+        WINDOW* win =
+            newwin(maxHeight + 2, maxWidth + 2, y / 2 - (maxHeight + 2) / 2,
+                   x / 2 - (maxWidth + 2) / 2);
+        keypad(win, true);
+        box(win, 0, 0);
+        mvwprintw(win, 0, 1, "%s", title.c_str());
         for (int i = 1; i < choices.size(); i++)
             mvwprintw(win, i + 1, 1, "%s", choices[i].c_str());
         do {
@@ -39,17 +42,18 @@ class ui {
                     if (choice > 0) {
                         mvwprintw(win, choice + 1, 1, "%s%*c",
                                   choices[choice].c_str(),
-                                  maxLen - choices[choice].length() + 1, '\0');
+                                  maxWidth - choices[choice].length() + 1,
+                                  '\0');
                         --choice;
                     }
-
                     break;
                 case 'j':
                 case KEY_DOWN:
                     if (choice < choices.size() - 1) {
                         mvwprintw(win, choice + 1, 1, "%s%*c",
                                   choices[choice].c_str(),
-                                  maxLen - choices[choice].length() + 1, '\0');
+                                  maxWidth - choices[choice].length() + 1,
+                                  '\0');
                         ++choice;
                     }
                     break;
@@ -58,11 +62,12 @@ class ui {
             }
             wattron(win, A_STANDOUT);
             mvwprintw(win, choice + 1, 1, "%s%*c", choices[choice].c_str(),
-                      maxLen - choices[choice].length() + 1, '\0');
+                      maxWidth - choices[choice].length() + 1, '\0');
             wattroff(win, A_STANDOUT);
         } while ((input = wgetch(win)) != '\n');
-
-        clear();
+        werase(win);
+        wrefresh(win);
+        delwin(win);
         echo();
         curs_set(true);
         return choice;
@@ -70,16 +75,16 @@ class ui {
 
     void progressBar(const long& prog, const long& total) {
         short y, x;
-        getyx(win, y, x);
+        getyx(stdscr, y, x);
         const int len = 30;
         short percent = ceil(float(len) / total * prog);
         wchar_t str[len + 1];
         for (short i = 0; i < percent; i++) str[i] = L'\u2588';
         for (short i = percent; i < len; i++) str[i] = L'\u2592';
         str[len] = L'\0';
-        mvwprintw(win, y, 1, "|%ls|", str);
-        if (prog == total) wmove(win, y + 1, 1);
-        wrefresh(win);
+        mvprintw(y, 0, "|%ls|", str);
+        if (prog == total) move(y + 1, 0);
+        refresh();
     }
 
     void notification(const string& title, const vector<string>& message) {
@@ -94,19 +99,20 @@ class ui {
         if (titleLen > maxWidth) maxWidth = titleLen;
         maxWidth += 4;
         getmaxyx(stdscr, y, x);
-        WINDOW* ntfwin =
-            newwin(maxHeight + 2, maxWidth, y / 2 - (maxHeight + 2) / 2,
-                   x / 2 - maxWidth / 2);
-        box(ntfwin, 0, 0);
-        mvwprintw(ntfwin, 0, maxWidth / 2 - titleLen / 2, "%s", title.c_str());
+        WINDOW* win = newwin(maxHeight + 2, maxWidth,
+                             y / 2 - (maxHeight + 2) / 2, x / 2 - maxWidth / 2);
+        box(win, 0, 0);
+        mvwprintw(win, 0, maxWidth / 2 - titleLen / 2, "%s", title.c_str());
         for (short i = 0; i < maxHeight; i++)
-            mvwprintw(ntfwin, i + 1, maxWidth / 2 - message[i].length() / 2,
-                      "%s", message[i].c_str());
-        wrefresh(ntfwin);
-        wgetch(ntfwin);
-        werase(ntfwin);
-        wrefresh(ntfwin);
-        delwin(ntfwin);
+            mvwprintw(win, i + 1, maxWidth / 2 - message[i].length() / 2, "%s",
+                      message[i].c_str());
+        wrefresh(win);
+
+        wgetch(win);
+        werase(win);
+        wrefresh(win);
+        delwin(win);
+
         echo();
         curs_set(true);
     }
@@ -115,32 +121,22 @@ class ui {
         setlocale(LC_ALL, "");
         initscr();
         cbreak();
-        short y, x;
-        getmaxyx(stdscr, y, x);
-        win = newwin(y, x, 0, 0);
-        scrollok(win, true);
-        keypad(win, true);
-        box(win, 0, 0);
-        refresh();
-        wrefresh(win);
+        scrollok(stdscr, true);
+        keypad(stdscr, true);
     }
-    ~ui() {
-        delwin(win);
-        endwin();
-    }
+    ~ui() { endwin(); }
 };
 
 int main() {
     ui ui;
-    // ui.menu("Kurwa:", {"sex", "boobies", "AAA"});
-    ui.notification("KURWA", {"SEEEEEEEEEEEEEEEEEEX",
-                              "SEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEX", "SEX"});
+    ui.menu("KURWA:", {"Boobies", "SEEEX", "DICK"});
     int n = 29;
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < 25; i++) {
         for (int j = 0; j <= n; j++) {
-            this_thread::sleep_for(ch::milliseconds(10));
+            this_thread::sleep_for(ch::milliseconds(1));
             ui.progressBar(j, n);
         }
     }
+    ui.notification("SUCKSEX!!!", {"Go Fuck Yourself :3"});
     getch();
 }
