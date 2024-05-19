@@ -142,20 +142,25 @@ class client {
 
     void reg() {
         char buffer[1024];
+        bool ok;
         do {
             clear();
             printw("Sign Up\nEnter Username: ");
             getstr(buffer);
             sock.send(buffer);
-        } while (sock.recv() != "ok");
+            if ((ok = sock.recv() != "ok"))
+                ui.notification("Kurwa", {"This username is already in use."});
+        } while (ok);
         printw("Enter Password: ");
         getstr(buffer);
         sock.send(buffer);
         clear();
+        ui.notification("Success!", {"You have registered a new account."});
     }
 
     void log() {
         char buffer[1024];
+        bool ok;
         do {
             printw("Sign In\nEnter Username: ");
             getstr(buffer);
@@ -164,7 +169,11 @@ class client {
             getstr(buffer);
             sock.send(buffer);
             clear();
-        } while (sock.recv() != "ok");
+            if ((ok = sock.recv() != "ok"))
+                ui.notification("Kurwa",
+                                {"The password or username is incorrect."});
+        } while (ok);
+        ui.notification("Success!", {"You signed in to your account."});
     }
     client(SSL* ssl, clsUi& ui) : sock(ssl), ui(ui) {}
 };
@@ -209,8 +218,7 @@ class project {
                     owner.sock.send("removeDir " + path + it.key());
                     owner.sock.send("createFile " + path + it.key());
                     if (owner.sock.recv() == "ok")
-                        owner.sock.sendFile(prjPath + path + it.key(),
-                                            &progressBar);
+                        owner.sock.sendFile(prjPath + path + it.key());
                 } else if (newjs[it.key()].is_object()) {
                     compJson(it.value(), newjs[it.key()],
                              path + it.key() + '/');
@@ -219,8 +227,7 @@ class project {
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
                     if (owner.sock.recv() == "ok")
-                        owner.sock.sendFile(prjPath + path + it.key(),
-                                            &progressBar);
+                        owner.sock.sendFile(prjPath + path + it.key());
                 }
             } else {
                 if (it.value().is_object() || it.value().is_null()) {
@@ -247,8 +254,7 @@ class project {
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
                     if (owner.sock.recv() == "ok")
-                        owner.sock.sendFile(prjPath + path + it.key(),
-                                            &progressBar);
+                        owner.sock.sendFile(prjPath + path + it.key());
                 }
             }
         }
@@ -261,19 +267,24 @@ class project {
 
     void set() {
         char buffer[1024];
-        /* do {
+        bool ok;
+        do {
             printw("Path to your project: ");
             getstr(buffer);
             prjPath = buffer;
-        } while (!fs::exists(prjPath) && !fs::is_directory(prjPath)); */
-        prjPath = "/home/jomm/Documents/kurwa/client/test/";
-        // prjPath += '/';
+            if ((ok = !fs::exists(prjPath) && !fs::is_directory(prjPath)))
+                owner.ui.notification("kurwa", {"Path is invalid."});
+        } while (ok);
+        prjPath += '/';
+        // prjPath = "/home/jomm/Documents/kurwa/client/test/";
         do {
             printw("Name of your project: ");
             getstr(buffer);
             prjName = buffer;
             owner.sock.send(prjName);
-        } while (owner.sock.recv() != "ok");
+            if ((ok = owner.sock.recv() != "ok"))
+                owner.ui.notification("Kurwa", {"Project name is invalid."});
+        } while (ok);
         clear();
     }
     void open() {
@@ -287,11 +298,12 @@ class project {
                 json check = genJson(prjPath);
                 compJson(curr, check, "");
                 owner.sock.send(check.dump());
-            } else if (!strcmp(buffer, "quit")) {
-                owner.sock.send("quit");
+            } else if (!strcmp(buffer, "back")) {
+                owner.sock.send("back");
                 break;
             }
         }
+        clear();
     }
     void download() {
         string command;
@@ -303,7 +315,7 @@ class project {
                 fs::create_directory(prjPath + path);
             } else if (action == "createFile") {
                 printw("File %s was created\n", path.c_str());
-                owner.sock.recvFile(prjPath + path, &progressBar);
+                owner.sock.recvFile(prjPath + path);
             }
         }
     }
@@ -338,29 +350,33 @@ int main(int argc, char* argv[]) {
             client.log();
             break;
     }
-    project project(client);
-    switch (ui.menu("Choose one option:",
-                    {"Create new project", "Open existing project",
-                     "Download project from server"})) {
-        case 0:
-            client.sock.send("createPrj");
-            project.set();
-            project.open();
-            break;
-        case 1:
-            client.sock.send("openPrj");
-            project.set();
-            project.open();
-            break;
-        case 2:
-            client.sock.send("downloadPrj");
-            project.set();
-            project.download();
-            project.open();
-            break;
+    while (true) {
+        project project(client);
+        switch (ui.menu("Choose one option:",
+                        {"Create new project", "Open existing project",
+                         "Download project from server", "Exit"})) {
+            case 0:
+                client.sock.send("createPrj");
+                project.set();
+                project.open();
+                break;
+            case 1:
+                client.sock.send("openPrj");
+                project.set();
+                project.open();
+                break;
+            case 2:
+                client.sock.send("downloadPrj");
+                project.set();
+                project.download();
+                project.open();
+                break;
+            case 3:
+                client.sock.send("quit");
+                endwin();
+                SSL_CTX_free(ctx);
+                client.sock.close();
+                return 0;
+        }
     }
-    endwin();
-
-    SSL_CTX_free(ctx);
-    client.sock.close();
 }

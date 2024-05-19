@@ -179,7 +179,6 @@ class project {
                 char uuidStr[37];
                 uuid_unparse(uuid, uuidStr);
                 prjPath = prjPath + uuidStr + '/';
-                cout << prjPath << endl;
                 fs::create_directory(prjPath);
                 db.exec(
                     "insert into projects (ownerId, prjName, dir, dirTree) "
@@ -203,7 +202,6 @@ class project {
                         "isis", owner.id, owner.sock.recv().c_str(), &prjId,
                         &uuid)) {
                 prjPath = prjPath + uuid + '/';
-                cout << prjPath << endl;
                 owner.sock.send("ok");
             } else
                 owner.sock.send("not ok");
@@ -212,12 +210,11 @@ class project {
 
     void open(db& db) {
         string command;
-        while ((command = owner.sock.recv()) != "quit") {
+        while ((command = owner.sock.recv()) != "back") {
             if (command == "push") {
                 string dirTree;
                 db.exec("select dirTree from projects where id = ?;", "si",
                         prjId, &dirTree);
-                cout << dirTree << endl;
                 owner.sock.send(dirTree);
                 while ((command = owner.sock.recv())[0] != '{') {
                     string action = command.substr(0, command.find(' '));
@@ -226,14 +223,14 @@ class project {
                     if (path.find("../") != string::npos)
                         owner.sock.send("not ok");
                     else {
-                        owner.sock.send("ok");
                         if (action == "createDir")
                             fs::create_directory(path);
                         else if (action == "removeDir")
                             fs::remove_all(path);
-                        else if (action == "createFile")
+                        else if (action == "createFile") {
+                            owner.sock.send("ok");
                             owner.sock.recvFile(path);
-                        else if (action == "removeFile")
+                        } else if (action == "removeFile")
                             fs::remove(path);
                     }
                 }
@@ -259,18 +256,19 @@ void handleClient(client client, db& db, const string& path) {
         client.log(db);
     } else if (command == "signIn")
         client.log(db);
-    project project(client, path);
-    command = client.sock.recv();
-    if (command == "createPrj") {
-        project.create(db);
-        project.open(db);
-    } else if (command == "openPrj") {
-        project.set(db);
-        project.open(db);
-    } else if (command == "downloadPrj") {
-        project.set(db);
-        project.download();
-        project.open(db);
+    while ((command = client.sock.recv()) != "quit") {
+        project project(client, path);
+        if (command == "createPrj") {
+            project.create(db);
+            project.open(db);
+        } else if (command == "openPrj") {
+            project.set(db);
+            project.open(db);
+        } else if (command == "downloadPrj") {
+            project.set(db);
+            project.download();
+            project.open(db);
+        }
     }
     client.sock.close();
     cout << "[-] Client disconnected." << endl;
