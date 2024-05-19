@@ -132,12 +132,14 @@ int main() {
     clsUi ui;
     ui.menu("KURWA:", {"Boobies", "SEEEX", "DICK"});
     int n = 29;
+    auto callback = [&ui](const long& prog, const long& total) {
+        ui.progressBar(prog, total);
+    };
     for (int i = 0; i < 25; i++) {
         for (int j = 0; j <= n; j++) {
             this_thread::sleep_for(ch::milliseconds(1));
-            ui.progressBar(j, n);
+            callback(j, n);
         }
     }
     ui.notification("SUCKSEX!!!", {"Go Fuck Yourself :3"});
-    getch();
 }

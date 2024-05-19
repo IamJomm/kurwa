@@ -79,21 +79,6 @@ class clsUi {
         curs_set(true);
         return choice;
     }
-
-    void progressBar(const long& prog, const long& total) {
-        short y, x;
-        getyx(stdscr, y, x);
-        const int len = 30;
-        short percent = ceil(float(len) / total * prog);
-        wchar_t str[len + 1];
-        for (short i = 0; i < percent; i++) str[i] = L'\u2588';
-        for (short i = percent; i < len; i++) str[i] = L'\u2592';
-        str[len] = L'\0';
-        mvprintw(y, 0, "|%ls|", str);
-        if (prog == total) move(y + 1, 0);
-        refresh();
-    }
-
     void notification(const string& title, const vector<string>& message) {
         noecho();
         curs_set(false);
@@ -178,6 +163,19 @@ class client {
     client(SSL* ssl, clsUi& ui) : sock(ssl), ui(ui) {}
 };
 
+void progressBar(const long& prog, const long& total) {
+    short y, x;
+    getyx(stdscr, y, x);
+    const int len = 30;
+    short percent = ceil(float(len) / total * prog);
+    wchar_t str[len + 1];
+    for (short i = 0; i < percent; i++) str[i] = L'\u2588';
+    for (short i = percent; i < len; i++) str[i] = L'\u2592';
+    str[len] = L'\0';
+    mvprintw(y, 0, "|%ls|", str);
+    if (prog == total) move(y + 1, 0);
+    refresh();
+}
 class project {
    private:
     json genJson(string path) {
@@ -194,7 +192,6 @@ class project {
         }
         return res;
     }
-
     void compJson(json& oldjs, json& newjs, string path) {
         for (json::iterator it = oldjs.begin(); it != oldjs.end(); ++it) {
             if (newjs.contains(it.key())) {
@@ -218,7 +215,8 @@ class project {
                     owner.sock.send("removeDir " + path + it.key());
                     owner.sock.send("createFile " + path + it.key());
                     if (owner.sock.recv() == "ok")
-                        owner.sock.sendFile(prjPath + path + it.key());
+                        owner.sock.sendFile(prjPath + path + it.key(),
+                                            &progressBar);
                 } else if (newjs[it.key()].is_object()) {
                     compJson(it.value(), newjs[it.key()],
                              path + it.key() + '/');
@@ -227,7 +225,8 @@ class project {
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
                     if (owner.sock.recv() == "ok")
-                        owner.sock.sendFile(prjPath + path + it.key());
+                        owner.sock.sendFile(prjPath + path + it.key(),
+                                            &progressBar);
                 }
             } else {
                 if (it.value().is_object() || it.value().is_null()) {
@@ -254,7 +253,8 @@ class project {
                            it.key().c_str());
                     owner.sock.send("createFile " + path + it.key());
                     if (owner.sock.recv() == "ok")
-                        owner.sock.sendFile(prjPath + path + it.key());
+                        owner.sock.sendFile(prjPath + path + it.key(),
+                                            &progressBar);
                 }
             }
         }
@@ -268,15 +268,15 @@ class project {
     void set() {
         char buffer[1024];
         bool ok;
-        do {
+        /* do {
             printw("Path to your project: ");
             getstr(buffer);
             prjPath = buffer;
             if ((ok = !fs::exists(prjPath) && !fs::is_directory(prjPath)))
                 owner.ui.notification("kurwa", {"Path is invalid."});
         } while (ok);
-        prjPath += '/';
-        // prjPath = "/home/jomm/Documents/kurwa/client/test/";
+        prjPath += '/'; */
+        prjPath = "/home/jomm/Documents/kurwa/client/test/";
         do {
             printw("Name of your project: ");
             getstr(buffer);
@@ -315,7 +315,7 @@ class project {
                 fs::create_directory(prjPath + path);
             } else if (action == "createFile") {
                 printw("File %s was created\n", path.c_str());
-                owner.sock.recvFile(prjPath + path);
+                owner.sock.recvFile(prjPath + path, &progressBar);
             }
         }
     }
@@ -325,11 +325,6 @@ class project {
 
 int main(int argc, char* argv[]) {
     string path = fs::canonical(argv[0]).parent_path().string() + '/';
-
-    setlocale(LC_ALL, "");
-    initscr();
-    scrollok(stdscr, TRUE);
-    keypad(stdscr, TRUE);
 
     SSL_library_init();
     SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
@@ -373,7 +368,6 @@ int main(int argc, char* argv[]) {
                 break;
             case 3:
                 client.sock.send("quit");
-                endwin();
                 SSL_CTX_free(ctx);
                 client.sock.close();
                 return 0;
