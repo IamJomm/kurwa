@@ -18,18 +18,21 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "sr.hpp"
 
-using std::string, std::thread, std::ref, std::cout, std::endl;
+using std::string, std::thread, std::ref, std::cout, std::endl, std::vector;
 namespace fs = std::filesystem;
+
+enum columnType { Int, Text, Blob };
 
 class db {
    private:
     sqlite3* database;
 
    public:
-    bool exec(const string& query, const string& types, ...) {
+    bool exec(const string& query, const vector<columnType>& types, ...) {
         va_list args;
         va_start(args, types);
         sqlite3_stmt* stmt;
@@ -39,15 +42,15 @@ class db {
         for (char ch : query)
             if (ch == '?') ++toBind;
         for (short i = 1, j = toBind; j; i++, j--) {
-            switch (types[types.length() - j]) {
-                case 's':
+            switch (types[types.size() - j]) {
+                case Text:
                     sqlite3_bind_text(stmt, i, va_arg(args, const char*), -1,
                                       SQLITE_STATIC);
                     break;
-                case 'i':
+                case Int:
                     sqlite3_bind_int(stmt, i, va_arg(args, unsigned long));
                     break;
-                case 'b':
+                case Blob:
                     const unsigned char* blob =
                         va_arg(args, const unsigned char*);
                     size_t blobSize = va_arg(args, size_t);
@@ -58,19 +61,19 @@ class db {
         }
         bool found = false;
         if (sqlite3_step(stmt) == SQLITE_ROW) {
-            for (short i = 0; i < types.length() - toBind; i++) {
+            for (short i = 0; i < types.size() - toBind; i++) {
                 switch (types[i]) {
-                    case 's': {
+                    case Text: {
                         string* ptr = va_arg(args, string*);
                         *ptr = (const char*)sqlite3_column_text(stmt, i);
                         break;
                     }
-                    case 'i': {
+                    case Int: {
                         unsigned long* ptr = va_arg(args, unsigned long*);
                         *ptr = sqlite3_column_int(stmt, i);
                         break;
                     }
-                    case 'b': {
+                    case Blob: {
                         unsigned char* blob = va_arg(args, unsigned char*);
                         size_t blobSize = va_arg(args, size_t);
                         memcpy(blob, sqlite3_column_blob(stmt, i),
@@ -94,7 +97,13 @@ class db {
     ~db() { sqlite3_close(database); }
 };
 
-class client {
+class person {
+   public:
+    clsSock sock;
+    unsigned long id = 0;
+    person(int sock, SSL* ssl) : sock(sock, ssl) {}
+};
+class client : public person {
    private:
     void genSha256Hash(const string& input,
                        unsigned char hash[SHA256_DIGEST_LENGTH + 1]) {
@@ -105,15 +114,12 @@ class client {
     }
 
    public:
-    clsSock sock;
-    unsigned long id = 0;
-
     void reg(db& db) {
         string sBuffer;
         string username;
         while (username.empty()) {
             sBuffer = sock.recv();
-            if (!db.exec("select id from users where username = ?;", "s",
+            if (!db.exec("select id from users where username = ?;", {Text},
                          sBuffer.c_str())) {
                 username = sBuffer;
                 sock.send("ok");
@@ -123,27 +129,35 @@ class client {
         sBuffer = sock.recv();
         unsigned char hash[SHA256_DIGEST_LENGTH + 1];
         genSha256Hash(sBuffer, hash);
-        db.exec("insert into users (username, password) values (?, ?);", "sb",
-                username.c_str(), hash, sizeof(hash));
+        db.exec("insert into users (username, password) values (?, ?);",
+                {Text, Blob}, username.c_str(), hash, sizeof(hash));
         cout << "[+] New user created." << endl;
     }
 
     void log(db& db) {
+        const short maxTries = 5;
+        short tries = 0;
         while (!id) {
             string username = sock.recv();
             string password = sock.recv();
             unsigned char hash[SHA256_DIGEST_LENGTH + 1];
             genSha256Hash(password, hash);
-            if (db.exec(
-                    "select id from users where username = ? and password = ?;",
-                    "isb", username.c_str(), hash, sizeof(hash), &id))
-                sock.send("ok");
-            else
+            if (tries < maxTries) {
+                if (db.exec("select id from users where username = ? and "
+                            "password = ?;",
+                            {Int, Text, Blob}, username.c_str(), hash,
+                            sizeof(hash), &id))
+                    sock.send("ok");
+                else {
+                    sock.send("not ok");
+                    ++tries;
+                }
+            } else
                 sock.send("not ok");
         }
     }
 
-    client(int sock, SSL* ssl) : sock(sock, ssl) {}
+    client(int sock, SSL* ssl) : person(sock, ssl) {}
 };
 
 class project {
@@ -173,7 +187,7 @@ class project {
             string prjName = owner.sock.recv();
             if (!db.exec("select id from projects where ownerId = ? and "
                          "prjName = ?;",
-                         "is", owner.id, prjName.c_str())) {
+                         {Int, Text}, owner.id, prjName.c_str())) {
                 uuid_t uuid;
                 uuid_generate(uuid);
                 char uuidStr[37];
@@ -183,10 +197,11 @@ class project {
                 db.exec(
                     "insert into projects (ownerId, prjName, dir, dirTree) "
                     "values (?, ?, ?, '{}');",
-                    "iss", owner.id, prjName.c_str(), uuidStr, &prjId);
+                    {Int, Text, Text}, owner.id, prjName.c_str(), uuidStr,
+                    &prjId);
                 db.exec(
                     "select id from projects where ownerId = ? and prjName = ?",
-                    "iis", owner.id, prjName.c_str(), &prjId);
+                    {Int, Int, Text}, owner.id, prjName.c_str(), &prjId);
                 cout << "[+] New project created." << endl;
                 owner.sock.send("ok");
             } else
@@ -199,8 +214,8 @@ class project {
             string uuid;
             if (db.exec("select id, dir from projects where ownerId = ? "
                         "and prjName = ?;",
-                        "isis", owner.id, owner.sock.recv().c_str(), &prjId,
-                        &uuid)) {
+                        {Int, Text, Int, Text}, owner.id,
+                        owner.sock.recv().c_str(), &prjId, &uuid)) {
                 prjPath = prjPath + uuid + '/';
                 owner.sock.send("ok");
             } else
@@ -213,8 +228,8 @@ class project {
         while ((command = owner.sock.recv()) != "back") {
             if (command == "push") {
                 string dirTree;
-                db.exec("select dirTree from projects where id = ?;", "si",
-                        prjId, &dirTree);
+                db.exec("select dirTree from projects where id = ?;",
+                        {Text, Int}, prjId, &dirTree);
                 owner.sock.send(dirTree);
                 while ((command = owner.sock.recv())[0] != '{') {
                     string action = command.substr(0, command.find(' '));
@@ -234,8 +249,8 @@ class project {
                             fs::remove(path);
                     }
                 }
-                db.exec("update projects set dirTree = ? where id = ?;", "si",
-                        command.c_str(), prjId);
+                db.exec("update projects set dirTree = ? where id = ?;",
+                        {Text, Int}, command.c_str(), prjId);
             }
         }
     }
@@ -245,7 +260,8 @@ class project {
         owner.sock.send("done");
     }
 
-    project(client& x, const string& y) : owner(x), prjPath(y) {}
+    project(client& client, const string& path)
+        : owner(client), prjPath(path) {}
 };
 
 void handleClient(client client, db& db, const string& path) {
@@ -301,12 +317,12 @@ int main(int argc, char* argv[]) {
 
     listen(servSock, 5);
     cout << "[!] Everything is ok :)" << endl;
-    while (true)
+    while (true) {
         thread(handleClient,
-               client(accept(servSock, (sockaddr*)&servAddr, &addrLen),
-                      SSL_new(ctx)),
+               client(accept(servSock, nullptr, nullptr), SSL_new(ctx)),
                ref(db), path)
             .detach();
+    }
 
     SSL_CTX_free(ctx);
     close(servSock);

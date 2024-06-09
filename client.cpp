@@ -268,15 +268,15 @@ class project {
     void set() {
         char buffer[1024];
         bool ok;
-        /* do {
+        do {
             printw("Path to your project: ");
             getstr(buffer);
             prjPath = buffer;
             if ((ok = !fs::exists(prjPath) && !fs::is_directory(prjPath)))
                 owner.ui.notification("kurwa", {"Path is invalid."});
         } while (ok);
-        prjPath += '/'; */
-        prjPath = "/home/jomm/Documents/kurwa/client/test/";
+        prjPath += '/';
+        // prjPath = "/home/jomm/Documents/kurwa/client/test/";
         do {
             printw("Name of your project: ");
             getstr(buffer);
@@ -320,7 +320,7 @@ class project {
         }
     }
 
-    project(client& x) : owner(x) {}
+    project(client& client) : owner(client) {}
 };
 
 int main(int argc, char* argv[]) {
