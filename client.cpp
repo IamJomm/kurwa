@@ -14,7 +14,8 @@
 
 #include "sr.hpp"
 
-using std::string, std::vector, nlohmann::json;
+using std::string, std::vector, nlohmann::json, std::cerr, std::endl,
+    std::runtime_error;
 namespace fs = std::filesystem;
 namespace ch = std::chrono;
 
@@ -306,17 +307,22 @@ class project {
         clear();
     }
     void download() {
-        string command;
-        while ((command = owner.sock.recv()) != "done") {
-            string action = command.substr(0, command.find(' '));
-            string path = command.substr(command.find(' ') + 1);
-            if (action == "createDir") {
-                printw("Folder %s was created\n", path.c_str());
-                fs::create_directory(prjPath + path);
-            } else if (action == "createFile") {
-                printw("File %s was created\n", path.c_str());
-                owner.sock.recvFile(prjPath + path, &progressBar);
+        try {
+            string command;
+            while ((command = owner.sock.recv()) != "done") {
+                string action = command.substr(0, command.find(' '));
+                string path = command.substr(command.find(' ') + 1);
+                if (action == "createDir") {
+                    printw("Folder %s was created\n", path.c_str());
+                    if (!fs::create_directory(prjPath + path))
+                        throw runtime_error("[!] Failed to create directory.");
+                } else if (action == "createFile") {
+                    printw("File %s was created\n", path.c_str());
+                    owner.sock.recvFile(prjPath + path, &progressBar);
+                }
             }
+        } catch (const runtime_error& e) {
+            cerr << e.what() << endl;
         }
     }
 

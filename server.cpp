@@ -22,7 +22,8 @@
 
 #include "sr.hpp"
 
-using std::string, std::thread, std::ref, std::cout, std::endl, std::vector;
+using std::string, std::thread, std::ref, std::cout, std::endl, std::vector,
+    std::cerr, std::endl, std::runtime_error, std::invalid_argument;
 namespace fs = std::filesystem;
 
 enum columnType { Int, Text, Blob };
@@ -224,34 +225,47 @@ class project {
     }
 
     void open(db& db) {
-        string command;
-        while ((command = owner.sock.recv()) != "back") {
-            if (command == "push") {
-                string dirTree;
-                db.exec("select dirTree from projects where id = ?;",
-                        {Text, Int}, prjId, &dirTree);
-                owner.sock.send(dirTree);
-                while ((command = owner.sock.recv())[0] != '{') {
-                    string action = command.substr(0, command.find(' '));
-                    string path =
-                        prjPath + command.substr(command.find(' ') + 1);
-                    if (path.find("../") != string::npos)
-                        owner.sock.send("not ok");
-                    else {
-                        if (action == "createDir")
-                            fs::create_directory(path);
-                        else if (action == "removeDir")
-                            fs::remove_all(path);
-                        else if (action == "createFile") {
-                            owner.sock.send("ok");
-                            owner.sock.recvFile(path);
-                        } else if (action == "removeFile")
-                            fs::remove(path);
+        try {
+            string command;
+            while ((command = owner.sock.recv()) != "back") {
+                if (command == "push") {
+                    string dirTree;
+                    db.exec("select dirTree from projects where id = ?;",
+                            {Text, Int}, prjId, &dirTree);
+                    owner.sock.send(dirTree);
+                    while ((command = owner.sock.recv())[0] != '{') {
+                        string action = command.substr(0, command.find(' '));
+                        string path =
+                            prjPath + command.substr(command.find(' ') + 1);
+                        if (path.find("../") != string::npos) {
+                            owner.sock.send("not ok");
+                            throw invalid_argument(
+                                "[!] Invalid path detected.");
+                        } else {
+                            if (action == "createDir") {
+                                if (!fs::create_directory(path))
+                                    throw runtime_error(
+                                        "[!] Failed to create directory.");
+                            } else if (action == "removeDir") {
+                                if (!fs::remove_all(path))
+                                    throw runtime_error(
+                                        "[!] Failed to remove all.");
+                            } else if (action == "createFile") {
+                                owner.sock.send("ok");
+                                owner.sock.recvFile(path);
+                            } else if (action == "removeFile") {
+                                if (!fs::remove(path))
+                                    throw runtime_error(
+                                        "[!] Failed to remove file.");
+                            }
+                        }
                     }
+                    db.exec("update projects set dirTree = ? where id = ?;",
+                            {Text, Int}, command.c_str(), prjId);
                 }
-                db.exec("update projects set dirTree = ? where id = ?;",
-                        {Text, Int}, command.c_str(), prjId);
             }
+        } catch (const runtime_error& e) {
+            cerr << e.what() << endl;
         }
     }
 
@@ -272,6 +286,11 @@ void handleClient(client client, db& db, const string& path) {
         client.log(db);
     } else if (command == "signIn")
         client.log(db);
+    else {
+        client.sock.send("Dinahu huiputalo blyat, parodia na ludynu.");
+        client.sock.close();
+        return;
+    }
     while ((command = client.sock.recv()) != "quit") {
         project project(client, path);
         if (command == "createPrj") {
