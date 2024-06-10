@@ -314,8 +314,7 @@ class project {
                 string path = command.substr(command.find(' ') + 1);
                 if (action == "createDir") {
                     printw("Folder %s was created\n", path.c_str());
-                    if (!fs::create_directory(prjPath + path))
-                        throw runtime_error("[!] Failed to create directory.");
+                    fs::create_directory(prjPath + path);
                 } else if (action == "createFile") {
                     printw("File %s was created\n", path.c_str());
                     owner.sock.recvFile(prjPath + path, &progressBar);
