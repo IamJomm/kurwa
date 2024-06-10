@@ -10,6 +10,7 @@
 #include <uuid/uuid.h>
 
 #include <cctype>
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -18,15 +19,22 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "sr.hpp"
 
 using std::string, std::thread, std::ref, std::cout, std::endl, std::vector,
-    std::cerr, std::endl, std::runtime_error, std::invalid_argument;
+    std::cerr, std::endl, std::runtime_error, std::invalid_argument,
+    std::unordered_map;
 namespace fs = std::filesystem;
+namespace ch = std::chrono;
 
-enum columnType { Int, Text, Blob };
+ch::time_point currentTime = ch::system_clock::now();
+unordered_map<string, int> tries;
+unordered_map<string, ch::system_clock::time_point> banned;
+
+enum columnType { Id, Text, Blob };
 
 class db {
    private:
@@ -48,7 +56,7 @@ class db {
                     sqlite3_bind_text(stmt, i, va_arg(args, const char*), -1,
                                       SQLITE_STATIC);
                     break;
-                case Int:
+                case Id:
                     sqlite3_bind_int(stmt, i, va_arg(args, unsigned long));
                     break;
                 case Blob:
@@ -69,7 +77,7 @@ class db {
                         *ptr = (const char*)sqlite3_column_text(stmt, i);
                         break;
                     }
-                    case Int: {
+                    case Id: {
                         unsigned long* ptr = va_arg(args, unsigned long*);
                         *ptr = sqlite3_column_int(stmt, i);
                         break;
@@ -137,21 +145,27 @@ class client : public person {
 
     void log(db& db) {
         const short maxTries = 5;
-        short tries = 0;
         while (!id) {
             string username = sock.recv();
             string password = sock.recv();
-            unsigned char hash[SHA256_DIGEST_LENGTH + 1];
-            genSha256Hash(password, hash);
-            if (tries < maxTries) {
+            if (banned.find(sock.ip) == banned.end() ||
+                banned[sock.ip] < ch::system_clock::now()) {
+                unsigned char hash[SHA256_DIGEST_LENGTH + 1];
+                genSha256Hash(password, hash);
                 if (db.exec("select id from users where username = ? and "
                             "password = ?;",
-                            {Int, Text, Blob}, username.c_str(), hash,
-                            sizeof(hash), &id))
+                            {Id, Text, Blob}, username.c_str(), hash,
+                            sizeof(hash), &id)) {
+                    tries.erase(sock.ip);
+                    banned.erase(sock.ip);
                     sock.send("ok");
-                else {
+                } else {
                     sock.send("not ok");
-                    ++tries;
+                    if (tries[sock.ip] == maxTries - 1)
+                        banned[sock.ip] =
+                            ch::system_clock::now() + ch::minutes(1);
+                    else
+                        ++tries[sock.ip];
                 }
             } else
                 sock.send("not ok");
@@ -188,7 +202,7 @@ class project {
             string prjName = owner.sock.recv();
             if (!db.exec("select id from projects where ownerId = ? and "
                          "prjName = ?;",
-                         {Int, Text}, owner.id, prjName.c_str())) {
+                         {Id, Text}, owner.id, prjName.c_str())) {
                 uuid_t uuid;
                 uuid_generate(uuid);
                 char uuidStr[37];
@@ -198,11 +212,11 @@ class project {
                 db.exec(
                     "insert into projects (ownerId, prjName, dir, dirTree) "
                     "values (?, ?, ?, '{}');",
-                    {Int, Text, Text}, owner.id, prjName.c_str(), uuidStr,
+                    {Id, Text, Text}, owner.id, prjName.c_str(), uuidStr,
                     &prjId);
                 db.exec(
                     "select id from projects where ownerId = ? and prjName = ?",
-                    {Int, Int, Text}, owner.id, prjName.c_str(), &prjId);
+                    {Id, Id, Text}, owner.id, prjName.c_str(), &prjId);
                 cout << "[+] New project created." << endl;
                 owner.sock.send("ok");
             } else
@@ -215,7 +229,7 @@ class project {
             string uuid;
             if (db.exec("select id, dir from projects where ownerId = ? "
                         "and prjName = ?;",
-                        {Int, Text, Int, Text}, owner.id,
+                        {Id, Text, Id, Text}, owner.id,
                         owner.sock.recv().c_str(), &prjId, &uuid)) {
                 prjPath = prjPath + uuid + '/';
                 owner.sock.send("ok");
@@ -231,7 +245,7 @@ class project {
                 if (command == "push") {
                     string dirTree;
                     db.exec("select dirTree from projects where id = ?;",
-                            {Text, Int}, prjId, &dirTree);
+                            {Text, Id}, prjId, &dirTree);
                     owner.sock.send(dirTree);
                     while ((command = owner.sock.recv())[0] != '{') {
                         string action = command.substr(0, command.find(' '));
@@ -261,7 +275,7 @@ class project {
                         }
                     }
                     db.exec("update projects set dirTree = ? where id = ?;",
-                            {Text, Int}, command.c_str(), prjId);
+                            {Text, Id}, command.c_str(), prjId);
                 }
             }
         } catch (const runtime_error& e) {
@@ -279,31 +293,34 @@ class project {
 };
 
 void handleClient(client client, db& db, const string& path) {
-    cout << "[+] Kurwa client connected." << endl;
-    string command = client.sock.recv();
-    if (command == "signUp") {
-        client.reg(db);
-        client.log(db);
-    } else if (command == "signIn")
-        client.log(db);
-    else {
-        client.sock.send("Dinahu huiputalo blyat, parodia na ludynu.");
-        client.sock.close();
-        return;
-    }
-    while ((command = client.sock.recv()) != "quit") {
-        project project(client, path);
-        if (command == "createPrj") {
-            project.create(db);
-            project.open(db);
-        } else if (command == "openPrj") {
-            project.set(db);
-            project.open(db);
-        } else if (command == "downloadPrj") {
-            project.set(db);
-            project.download();
-            project.open(db);
+    try {
+        cout << "[+] Kurwa client connected." << endl;
+        string command = client.sock.recv();
+        if (command == "signUp") {
+            client.reg(db);
+            client.log(db);
+        } else if (command == "signIn")
+            client.log(db);
+        else {
+            client.sock.send("Dinahu huiputalo blyat, parodia na ludynu.");
+            throw invalid_argument("[!] Chert detected.");
         }
+        while ((command = client.sock.recv()) != "quit") {
+            project project(client, path);
+            if (command == "createPrj") {
+                project.create(db);
+                project.open(db);
+            } else if (command == "openPrj") {
+                project.set(db);
+                project.open(db);
+            } else if (command == "downloadPrj") {
+                project.set(db);
+                project.download();
+                project.open(db);
+            }
+        }
+    } catch (const runtime_error& e) {
+        cerr << e.what() << endl;
     }
     client.sock.close();
     cout << "[-] Client disconnected." << endl;
@@ -327,7 +344,7 @@ int main(int argc, char* argv[]) {
                                 SSL_FILETYPE_PEM);
 
     int servSock = socket(AF_INET, SOCK_STREAM, 0);
-    sockaddr_in servAddr{};
+    sockaddr_in servAddr;
     servAddr.sin_family = AF_INET;
     servAddr.sin_port = htons(8080);
     servAddr.sin_addr.s_addr = INADDR_ANY;
@@ -337,10 +354,14 @@ int main(int argc, char* argv[]) {
     listen(servSock, 5);
     cout << "[!] Everything is ok :)" << endl;
     while (true) {
-        thread(handleClient,
-               client(accept(servSock, nullptr, nullptr), SSL_new(ctx)),
-               ref(db), path)
-            .detach();
+        sockaddr_in clientAddr;
+        socklen_t clientAddrLen = sizeof(clientAddr);
+        client client(
+            accept(servSock, (struct sockaddr*)&clientAddr, &clientAddrLen),
+            SSL_new(ctx));
+        inet_ntop(AF_INET, &clientAddr.sin_addr, client.sock.ip,
+                  INET_ADDRSTRLEN);
+        thread(handleClient, client, ref(db), path).detach();
     }
 
     SSL_CTX_free(ctx);

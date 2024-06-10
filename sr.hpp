@@ -12,6 +12,7 @@ class clsSock {
    public:
     int sock;
     SSL *ssl;
+    char ip[INET_ADDRSTRLEN];
 
     void send(const string &msg) {
         short msgSize = msg.size();
@@ -36,8 +37,7 @@ class clsSock {
             }
             return res;
         } catch (const runtime_error &e) {
-            cerr << e.what() << endl;
-            return "";
+            throw;
         }
     }
 
@@ -92,7 +92,7 @@ class clsSock {
                 throw runtime_error("Error writing to the file.");
             output.close();
         } catch (const runtime_error &e) {
-            cerr << e.what() << endl;
+            throw;
         }
     }
 
