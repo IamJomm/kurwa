@@ -16,14 +16,16 @@ class clsSock {
 
     void send(const string &msg) {
         short msgSize = msg.size();
-        SSL_write(ssl, &msgSize, sizeof(msgSize));
-        SSL_write(ssl, msg.c_str(), msgSize);
+        if (SSL_write(ssl, &msgSize, sizeof(msgSize)) <= 0)
+            throw runtime_error("Error writing message size to SSL.");
+        if (SSL_write(ssl, msg.c_str(), msgSize) <= 0)
+            throw runtime_error("Error writing message body to SSL.");
     }
     string recv() {
         try {
             short msgSize;
             if (SSL_read(ssl, (char *)&msgSize, sizeof(msgSize)) <= 0)
-                throw runtime_error("[!] Error reading message size.");
+                throw runtime_error("[!] Error reading message size from SSL.");
             string res;
             char buffer[1024];
             while (msgSize) {
@@ -31,7 +33,8 @@ class clsSock {
                 int bytesRead =
                     SSL_read(ssl, buffer, min((short)sizeof(buffer), msgSize));
                 if (bytesRead <= 0)
-                    throw runtime_error("[!] Error reading message body");
+                    throw runtime_error(
+                        "[!] Error reading message body from SSL.");
                 msgSize -= bytesRead;
                 res.append(buffer);
             }
@@ -49,21 +52,27 @@ class clsSock {
                 throw runtime_error("[!] Failed to open the file for reading.");
             input.seekg(0, ios::end);
             long fileSize = input.tellg();
+            if (fileSize < 0)
+                throw runtime_error("[!] Failed to get the file size.");
             input.seekg(0, ios::beg);
-            SSL_write(ssl, &fileSize, sizeof(fileSize));
+            if (SSL_write(ssl, &fileSize, sizeof(fileSize)) <= 0)
+                throw runtime_error(
+                    "[!] Error writing file content size to SSL.");
             char buffer[1024];
             long bytesLeft = fileSize;
             while (bytesLeft) {
                 short bytesToSend = min(bytesLeft, (long)sizeof(buffer));
                 input.read(buffer, bytesToSend);
-                SSL_write(ssl, buffer, bytesToSend);
+                if (SSL_write(ssl, buffer, bytesToSend) <= 0)
+                    throw runtime_error(
+                        "[!] Error writing file content to SSL.");
                 bytesLeft -= bytesToSend;
                 memset(buffer, 0, sizeof(buffer));
                 if (callback) callback(fileSize - bytesLeft, fileSize);
             }
             input.close();
         } catch (const runtime_error &e) {
-            cerr << e.what() << endl;
+            throw;
         }
     }
     void recvFile(const string &path,
