@@ -15,11 +15,15 @@ class clsSock {
     char ip[INET_ADDRSTRLEN];
 
     void send(const string &msg) {
-        short msgSize = msg.size();
-        if (SSL_write(ssl, &msgSize, sizeof(msgSize)) <= 0)
-            throw runtime_error("Error writing message size to SSL.");
-        if (SSL_write(ssl, msg.c_str(), msgSize) <= 0)
-            throw runtime_error("Error writing message body to SSL.");
+        try {
+            short msgSize = msg.size();
+            if (SSL_write(ssl, &msgSize, sizeof(msgSize)) <= 0)
+                throw runtime_error("Error writing message size to SSL.");
+            if (SSL_write(ssl, msg.c_str(), msgSize) <= 0)
+                throw runtime_error("Error writing message body to SSL.");
+        } catch (const runtime_error &e) {
+            throw;
+        }
     }
     string recv() {
         try {

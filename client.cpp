@@ -80,6 +80,7 @@ class clsUi {
         curs_set(true);
         return choice;
     }
+
     void notification(const string& title, const vector<string>& message) {
         noecho();
         curs_set(false);
@@ -110,6 +111,26 @@ class clsUi {
         curs_set(true);
     }
 
+    string getinput(const string& title, const short& minLength) {
+        char buffer[1024];
+        int y, x;
+        getyx(stdscr, y, x);
+        printw("%s", title.c_str());
+        while (true) {
+            move(y, title.length());
+            clrtoeol();
+            getnstr(buffer, sizeof(buffer) - 1);
+            if (strlen(buffer) < minLength)
+                notification(
+                    "Invalid Input",
+                    {"Input length should be ",
+                     "at least " + to_string(minLength) + " characters."});
+            else
+                break;
+        }
+        return buffer;
+    }
+
     clsUi() {
         setlocale(LC_ALL, "");
         initscr();
@@ -131,15 +152,12 @@ class client {
         bool ok;
         do {
             clear();
-            printw("Sign Up\nEnter Username: ");
-            getstr(buffer);
-            sock.send(buffer);
+            printw("Sign Up\n");
+            sock.send(ui.getinput("Enter Username: ", 3));
             if ((ok = sock.recv() != "ok"))
-                ui.notification("Kurwa", {"This username is already in use."});
+                ui.notification("Alert", {"This username is already in use."});
         } while (ok);
-        printw("Enter Password: ");
-        getstr(buffer);
-        sock.send(buffer);
+        sock.send(ui.getinput("Enter Password: ", 3));
         clear();
         ui.notification("Success!", {"You have registered a new account."});
     }
@@ -148,19 +166,16 @@ class client {
         char buffer[1024];
         bool ok;
         do {
-            printw("Sign In\nEnter Username: ");
-            getstr(buffer);
-            sock.send(buffer);
-            printw("Enter Password: ");
-            getstr(buffer);
-            sock.send(buffer);
+            sock.send(ui.getinput("Enter Username: ", 3));
+            sock.send(ui.getinput("Enter Password: ", 3));
             clear();
             if ((ok = sock.recv() != "ok"))
-                ui.notification("Kurwa",
+                ui.notification("Alert",
                                 {"The password or username is incorrect."});
         } while (ok);
         ui.notification("Success!", {"You signed in to your account."});
     }
+
     client(SSL* ssl, clsUi& ui) : sock(ssl), ui(ui) {}
 };
 
@@ -270,36 +285,30 @@ class project {
         char buffer[1024];
         bool ok;
         do {
-            printw("Path to your project: ");
-            getstr(buffer);
-            prjPath = buffer;
+            prjPath = owner.ui.getinput("Path to your project: ", 1);
             if ((ok = !fs::exists(prjPath) && !fs::is_directory(prjPath)))
-                owner.ui.notification("kurwa", {"Path is invalid."});
+                owner.ui.notification("Alert", {"Path is invalid."});
         } while (ok);
         prjPath += '/';
         // prjPath = "/home/jomm/Documents/kurwa/client/test/";
         do {
-            printw("Name of your project: ");
-            getstr(buffer);
-            prjName = buffer;
+            prjName = owner.ui.getinput("Name of your project: ", 3);
             owner.sock.send(prjName);
             if ((ok = owner.sock.recv() != "ok"))
-                owner.ui.notification("Kurwa", {"Project name is invalid."});
+                owner.ui.notification("Alert", {"Project name is invalid."});
         } while (ok);
         clear();
     }
     void open() {
-        char buffer[20];
+        string command;
         while (true) {
-            printw("> ");
-            getstr(buffer);
-            if (!strcmp(buffer, "push")) {
+            if ((command = owner.ui.getinput("> ", 3)) == "push") {
                 owner.sock.send("push");
                 json curr = json::parse(owner.sock.recv());
                 json check = genJson(prjPath);
                 compJson(curr, check, "");
                 owner.sock.send(check.dump());
-            } else if (!strcmp(buffer, "back")) {
+            } else if (command == "back") {
                 owner.sock.send("back");
                 break;
             }

@@ -4,6 +4,7 @@
 #include <clocale>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <vector>
@@ -87,6 +88,26 @@ class clsUi {
         refresh();
     }
 
+    string getinput(const string& title, const short& minLength) {
+        char buffer[1024];
+        int y, x;
+        getyx(stdscr, y, x);
+        printw("%s", title.c_str());
+        while (true) {
+            move(y, title.length());
+            clrtoeol();
+            getnstr(buffer, sizeof(buffer) - 1);
+            if (strlen(buffer) < minLength)
+                notification(
+                    "Invalid Input",
+                    {"Input length should be ",
+                     "at least " + to_string(minLength) + " characters."});
+            else
+                break;
+        }
+        return buffer;
+    }
+
     void notification(const string& title, const vector<string>& message) {
         noecho();
         curs_set(false);
@@ -130,16 +151,6 @@ class clsUi {
 
 int main() {
     clsUi ui;
-    ui.menu("KURWA:", {"Boobies", "SEEEX", "DICK"});
-    int n = 29;
-    auto callback = [&ui](const long& prog, const long& total) {
-        ui.progressBar(prog, total);
-    };
-    for (int i = 0; i < 25; i++) {
-        for (int j = 0; j <= n; j++) {
-            this_thread::sleep_for(ch::milliseconds(1));
-            callback(j, n);
-        }
-    }
-    ui.notification("SUCKSEX!!!", {"Go Fuck Yourself :3"});
+    printw("%s", ui.getinput("Password: ", 3).c_str());
+    getch();
 }
