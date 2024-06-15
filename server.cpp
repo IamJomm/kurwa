@@ -140,7 +140,7 @@ class clsClient : public clsPerson {
         genSha256Hash(sBuffer, hash);
         db.exec("insert into users (username, password) values (?, ?);",
                 {Text, Blob}, username.c_str(), hash, sizeof(hash));
-        cout << "[+] New user created." << endl;
+        cout << "[+] New user created. " << sock.ip << endl;
     }
 
     void log(clsDb& db) {
@@ -217,7 +217,7 @@ class clsProject {
                 db.exec(
                     "select id from projects where ownerId = ? and prjName = ?",
                     {Id, Id, Text}, owner.id, prjName.c_str(), &prjId);
-                cout << "[+] New project created." << endl;
+                cout << "[+] New project created. " << owner.sock.ip << endl;
                 owner.sock.send("ok");
             } else
                 owner.sock.send("not ok");
@@ -279,7 +279,7 @@ class clsProject {
                 }
             }
         } catch (const runtime_error& e) {
-            cerr << e.what() << endl;
+            cerr << e.what() << ' ' << owner.sock.ip << endl;
         }
     }
 
@@ -302,7 +302,7 @@ void handleClient(clsClient client, clsDb& db, const string& path) {
         } else if (command == "signIn")
             client.log(db);
         else {
-            client.sock.send("Dinahu huiputalo blyat, parodia na ludynu.");
+            client.sock.send("Dinahu huiputalo blyat.");
             throw invalid_argument("[!] Chert detected.");
         }
         while ((command = client.sock.recv()) != "quit") {

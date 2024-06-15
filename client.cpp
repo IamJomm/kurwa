@@ -159,8 +159,9 @@ class clsClient {
                 ui.notification("Alert", {"This username is already in use."});
         } while (ok);
         sock.send(ui.getinput("Enter Password: ", 3));
-        clear();
         ui.notification("Success!", {"You have registered a new account."});
+        clear();
+        refresh();
     }
 
     void log() {
@@ -176,8 +177,9 @@ class clsClient {
                 ui.notification("Alert",
                                 {"The password or username is incorrect."});
         } while (ok);
-        clear();
         ui.notification("Success!", {"You signed in to your account."});
+        clear();
+        refresh();
     }
 
     clsClient(SSL* ssl, clsUi& ui) : sock(ssl), ui(ui) {}
@@ -294,7 +296,6 @@ class project {
                 owner.ui.notification("Alert", {"Path is invalid."});
         } while (ok);
         prjPath += '/';
-        // prjPath = "/home/jomm/Documents/kurwa/clsClient/test/";
         do {
             prjName = owner.ui.getinput("Name of your project: ", 3);
             owner.sock.send(prjName);

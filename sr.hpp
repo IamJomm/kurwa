@@ -119,7 +119,7 @@ class clsSock {
         SSL_accept(ssl);
     }
     clsSock(SSL *ssl) : sock(socket(AF_INET, SOCK_STREAM, 0)), ssl(ssl) {
-        sockaddr_in servAddr{};
+        sockaddr_in servAddr;
         servAddr.sin_family = AF_INET;
         servAddr.sin_port = htons(8080);
         inet_pton(AF_INET, "127.0.0.1", &servAddr.sin_addr);
