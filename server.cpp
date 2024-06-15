@@ -36,16 +36,16 @@ unordered_map<string, ch::system_clock::time_point> banned;
 
 enum columnType { Id, Text, Blob };
 
-class db {
+class clsDb {
    private:
-    sqlite3* database;
+    sqlite3* db;
 
    public:
     bool exec(const string& query, const vector<columnType>& types, ...) {
         va_list args;
         va_start(args, types);
         sqlite3_stmt* stmt;
-        sqlite3_prepare_v2(database, query.c_str(), -1, &stmt, 0);
+        sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, 0);
 
         short toBind = 0;
         for (char ch : query)
@@ -99,20 +99,20 @@ class db {
         return found;
     }
 
-    db(const string& path, const string& command) {
-        sqlite3_open(path.c_str(), &database);
-        sqlite3_exec(database, command.c_str(), 0, 0, 0);
+    clsDb(const string& path, const string& command) {
+        sqlite3_open(path.c_str(), &db);
+        sqlite3_exec(db, command.c_str(), 0, 0, 0);
     }
-    ~db() { sqlite3_close(database); }
+    ~clsDb() { sqlite3_close(db); }
 };
 
-class person {
+class clsPerson {
    public:
     clsSock sock;
     unsigned long id = 0;
-    person(int sock, SSL* ssl) : sock(sock, ssl) {}
+    clsPerson(int sock, SSL* ssl) : sock(sock, ssl) {}
 };
-class client : public person {
+class clsClient : public clsPerson {
    private:
     void genSha256Hash(const string& input,
                        unsigned char hash[SHA256_DIGEST_LENGTH + 1]) {
@@ -123,7 +123,7 @@ class client : public person {
     }
 
    public:
-    void reg(db& db) {
+    void reg(clsDb& db) {
         string sBuffer;
         string username;
         while (username.empty()) {
@@ -143,7 +143,7 @@ class client : public person {
         cout << "[+] New user created." << endl;
     }
 
-    void log(db& db) {
+    void log(clsDb& db) {
         const short maxTries = 5;
         while (!id) {
             string username = sock.recv();
@@ -172,10 +172,10 @@ class client : public person {
         }
     }
 
-    client(int sock, SSL* ssl) : person(sock, ssl) {}
+    clsClient(int sock, SSL* ssl) : clsPerson(sock, ssl) {}
 };
 
-class project {
+class clsProject {
    private:
     void downloadHelp(const string& path) {
         for (const fs::directory_entry& entry : fs::directory_iterator(path)) {
@@ -193,11 +193,11 @@ class project {
     }
 
    public:
-    client owner;
+    clsClient owner;
     string prjPath;
     unsigned long prjId = 0;
 
-    void create(db& db) {
+    void create(clsDb& db) {
         while (!prjId) {
             string prjName = owner.sock.recv();
             if (!db.exec("select id from projects where ownerId = ? and "
@@ -224,7 +224,7 @@ class project {
         }
     }
 
-    void set(db& db) {
+    void set(clsDb& db) {
         while (!prjId) {
             string uuid;
             if (db.exec("select id, dir from projects where ownerId = ? "
@@ -238,7 +238,7 @@ class project {
         }
     }
 
-    void open(db& db) {
+    void open(clsDb& db) {
         try {
             string command;
             while ((command = owner.sock.recv()) != "back") {
@@ -288,13 +288,13 @@ class project {
         owner.sock.send("done");
     }
 
-    project(client& client, const string& path)
+    clsProject(clsClient& client, const string& path)
         : owner(client), prjPath(path) {}
 };
 
-void handleClient(client client, db& db, const string& path) {
+void handleClient(clsClient client, clsDb& db, const string& path) {
     try {
-        cout << "[+] Kurwa client connected." << endl;
+        cout << "[+] Kurwa client connected. " << client.sock.ip << endl;
         string command = client.sock.recv();
         if (command == "signUp") {
             client.reg(db);
@@ -306,7 +306,7 @@ void handleClient(client client, db& db, const string& path) {
             throw invalid_argument("[!] Chert detected.");
         }
         while ((command = client.sock.recv()) != "quit") {
-            project project(client, path);
+            clsProject project(client, path);
             if (command == "createPrj") {
                 project.create(db);
                 project.open(db);
@@ -320,17 +320,17 @@ void handleClient(client client, db& db, const string& path) {
             }
         }
     } catch (const runtime_error& e) {
-        cerr << e.what() << endl;
+        cerr << e.what() << ' ' << client.sock.ip << endl;
     }
     client.sock.close();
-    cout << "[-] Client disconnected." << endl;
+    cout << "[-] Client disconnected. " << client.sock.ip << endl;
 }
 
 int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
     const string path = fs::canonical(argv[0]).parent_path().string() + '/';
 
-    db db(
+    clsDb db(
         path + "users.db",
         "create table if not exists users (id integer primary key, username "
         "text, password blob); create table if not exists projects (id integer "
@@ -356,7 +356,7 @@ int main(int argc, char* argv[]) {
     while (true) {
         sockaddr_in clientAddr;
         socklen_t clientAddrLen = sizeof(clientAddr);
-        client client(
+        clsClient client(
             accept(servSock, (struct sockaddr*)&clientAddr, &clientAddrLen),
             SSL_new(ctx));
         inet_ntop(AF_INET, &clientAddr.sin_addr, client.sock.ip,

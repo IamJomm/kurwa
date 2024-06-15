@@ -142,7 +142,7 @@ class clsUi {
     ~clsUi() { endwin(); }
 };
 
-class client {
+class clsClient {
    public:
     clsSock sock;
     clsUi ui;
@@ -150,9 +150,10 @@ class client {
     void reg() {
         char buffer[1024];
         bool ok;
+        printw("Sign Up");
         do {
-            clear();
-            printw("Sign Up\n");
+            move(1, 0);
+            clrtobot();
             sock.send(ui.getinput("Enter Username: ", 3));
             if ((ok = sock.recv() != "ok"))
                 ui.notification("Alert", {"This username is already in use."});
@@ -165,18 +166,21 @@ class client {
     void log() {
         char buffer[1024];
         bool ok;
+        printw("Sign In");
         do {
+            move(1, 0);
+            clrtobot();
             sock.send(ui.getinput("Enter Username: ", 3));
             sock.send(ui.getinput("Enter Password: ", 3));
-            clear();
             if ((ok = sock.recv() != "ok"))
                 ui.notification("Alert",
                                 {"The password or username is incorrect."});
         } while (ok);
+        clear();
         ui.notification("Success!", {"You signed in to your account."});
     }
 
-    client(SSL* ssl, clsUi& ui) : sock(ssl), ui(ui) {}
+    clsClient(SSL* ssl, clsUi& ui) : sock(ssl), ui(ui) {}
 };
 
 void progressBar(const long& prog, const long& total) {
@@ -277,7 +281,7 @@ class project {
     }
 
    public:
-    client owner;
+    clsClient owner;
     string prjName;
     string prjPath;
 
@@ -290,7 +294,7 @@ class project {
                 owner.ui.notification("Alert", {"Path is invalid."});
         } while (ok);
         prjPath += '/';
-        // prjPath = "/home/jomm/Documents/kurwa/client/test/";
+        // prjPath = "/home/jomm/Documents/kurwa/clsClient/test/";
         do {
             prjName = owner.ui.getinput("Name of your project: ", 3);
             owner.sock.send(prjName);
@@ -334,7 +338,7 @@ class project {
         }
     }
 
-    project(client& client) : owner(client) {}
+    project(clsClient& clsClient) : owner(clsClient) {}
 };
 
 int main(int argc, char* argv[]) {
@@ -346,7 +350,7 @@ int main(int argc, char* argv[]) {
     SSL_CTX_load_verify_locations(ctx, (path + "cert.pem").c_str(), NULL);
 
     clsUi ui;
-    client client(SSL_new(ctx), ui);
+    clsClient client(SSL_new(ctx), ui);
 
     switch (ui.menu("Choose one option:", {"Sign In", "Sign Up"})) {
         case 0:
